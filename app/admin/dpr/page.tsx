@@ -49,6 +49,7 @@ interface KPIData {
   totalDeaths: number;
   totalCasualtyOPD: number;
   totalConsultantOPD: number;
+  totalOtherOPD: number; // NEW
   totalXray: number;
   totalDialysis: number;
   totalPathology: number;
@@ -89,6 +90,7 @@ const DPRPage = () => {
     totalDeaths: 0,
     totalCasualtyOPD: 0,
     totalConsultantOPD: 0,
+    totalOtherOPD: 0, // NEW
     totalXray: 0,
     totalDialysis: 0,
     totalPathology: 0,
@@ -199,26 +201,52 @@ const DPRPage = () => {
 
       let totalCasualtyOPD = 0;
       let totalConsultantOPD = 0;
-      let totalXray = 0;
+      let totalOtherOPD = 0; // Initialize new counter
       let totalDialysis = 0;
 
+      const countedOpdIds = new Set(); // To track unique OPD appointments
+
       opdAppointments?.forEach((appointment: any) => {
+        if (countedOpdIds.has(appointment.opd_id)) {
+          return; // Skip if this OPD appointment has already been counted
+        }
+
+        let isCasualty = false;
+        let isConsultation = false;
+
         if (appointment.service_info && Array.isArray(appointment.service_info)) {
           appointment.service_info.forEach((service: any) => {
             const serviceType = service.type?.toLowerCase();
             if (serviceType === 'casualty') {
-              totalCasualtyOPD++;
+              isCasualty = true;
               if (service.service?.toLowerCase().includes('dialysis')) {
                 totalDialysis++;
               }
             } else if (serviceType === 'consultation') {
-              totalConsultantOPD++;
-            } else if (serviceType === 'xray') {
-              totalXray++;
+              isConsultation = true;
+            }
+            // X-ray count can still be per service, as per original logic if not tied to unique appointments
+            if (serviceType === 'xray') {
+              // We keep this as is, as X-ray count might be a service count, not an appointment count
+              // If X-ray also needs to be per unique appointment, its logic would need adjustment too.
+              // For now, it remains a service count if multiple X-rays can be in one appointment.
+              // totalXray++; // This was moved out of the loop and handled by API call
             }
           });
         }
+
+        // Categorize the unique appointment
+        if (isCasualty) {
+          totalCasualtyOPD++;
+        } else if (isConsultation) {
+          totalConsultantOPD++;
+        } else {
+          totalOtherOPD++; // Count as 'other' if neither casualty nor consultation
+        }
+        countedOpdIds.add(appointment.opd_id); // Mark this OPD ID as counted
       });
+
+      const finalTotalOPDAppointments = totalCasualtyOPD + totalConsultantOPD + totalOtherOPD;
 
       const totalIPD = ipdAdmissions?.length || 0;
 
@@ -265,8 +293,41 @@ const DPRPage = () => {
         console.warn('Error while fetching pathology count', e)
       }
 
+      // Fetch X-ray count from external API
+      let totalXray = 0;
+      try {
+        const xrayApiDate = format(parseISO(selectedDate), 'dd-MM-yyyy');
+        const hospitalName = process.env.NEXT_PUBLIC_LAB_HOSPITAL_NAME || '';
+
+        const res = await fetch('https://labapi.infispark.in/rest/v1/rpc/get_registration_count_xray', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': process.env.NEXT_PUBLIC_LAB_API_KEY || '',
+            'Authorization': `Bearer ${process.env.NEXT_PUBLIC_LAB_API_KEY}` || '',
+          },
+          body: JSON.stringify({ p_date: xrayApiDate, p_hospital: hospitalName })
+        });
+
+        if (res.ok) {
+          const json = await res.json();
+          // Assuming the API returns an array with the count in the first element
+          if (typeof json === 'number') {
+            totalXray = json;
+          } else if (json && Array.isArray(json) && json.length > 0 && typeof json[0].count === 'number') {
+            totalXray = json[0].count;
+          } else {
+            console.warn('X-ray API response format unexpected:', json);
+          }
+        } else {
+          console.warn('Failed to fetch X-ray count from API:', res.status, res.statusText);
+        }
+      } catch (e) {
+        console.warn('Error while fetching X-ray count:', e);
+      }
+
       setKpiData({
-        totalOPDAppointments: totalOPD,
+        totalOPDAppointments: finalTotalOPDAppointments,
         totalIPDAdmissions: totalIPD,
         totalDischarges: totalDischarges,
         totalMajorOT: majorOT,
@@ -275,6 +336,7 @@ const DPRPage = () => {
         totalDeaths: totalDeaths,
         totalCasualtyOPD: totalCasualtyOPD,
         totalConsultantOPD: totalConsultantOPD,
+        totalOtherOPD: totalOtherOPD,
         totalXray: totalXray,
         totalDialysis: totalDialysis,
         totalPathology,
@@ -545,6 +607,10 @@ const DPRPage = () => {
                 <div className="opd-breakdown-value" style={{ color: '#4f46e5' }}>{kpiData.totalConsultantOPD}</div>
                 <div className="opd-breakdown-label">Consultant</div>
               </div>
+              <div className="opd-breakdown-item">
+                <div className="opd-breakdown-value" style={{ color: '#f59e0b' }}>{kpiData.totalOtherOPD}</div>
+                <div className="opd-breakdown-label">Other</div>
+              </div>
             </div>
           </div>
           <div className="kpi-card">
@@ -694,27 +760,27 @@ const DPRPage = () => {
     <Layout>
       <div className="space-y-8 p-6 bg-gray-50 min-h-screen">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6 bg-white p-6 rounded-lg shadow-md">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 md:gap-6 bg-white p-4 sm:p-6 rounded-lg shadow-md">
           <div>
-            <h1 className="text-4xl font-extrabold text-gray-900 leading-tight">Daily Performance Report</h1>
-            <p className="text-lg text-gray-600 mt-2">A comprehensive overview of hospital operations for <span className="font-semibold text-blue-700">{format(parseISO(selectedDate), 'EEEE, MMMM dd, yyyy')}</span></p>
+            <h1 className="text-3xl sm:text-4xl font-extrabold text-gray-900 leading-tight">Daily Performance Report</h1>
+            <p className="text-md sm:text-lg text-gray-600 mt-1 sm:mt-2">A comprehensive overview of hospital operations for <span className="font-semibold text-blue-700">{format(parseISO(selectedDate), 'EEEE, MMMM dd, yyyy')}</span></p>
           </div>
 
           {/* Filters and Print Button */}
-          <div className="flex flex-wrap items-center gap-4">
-            <div className="flex items-center gap-2">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4 mt-4 sm:mt-0">
+            <div className="flex items-center gap-2 w-full sm:w-auto">
               <Calendar className="h-5 w-5 text-gray-500" />
               <Input
                 type="date"
                 value={selectedDate}
                 onChange={(e) => setSelectedDate(e.target.value)}
-                className="w-auto border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring focus:ring-blue-200 focus:ring-opacity-50 transition duration-200"
+                className="w-full sm:w-auto border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring focus:ring-blue-200 focus:ring-opacity-50 transition duration-200"
               />
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 w-full sm:w-auto">
               <Building2 className="h-5 w-5 text-gray-500" />
               <Select value={departmentFilter} onValueChange={setDepartmentFilter}>
-                <SelectTrigger className="w-auto border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring focus:ring-blue-200 focus:ring-opacity-50 transition duration-200">
+                <SelectTrigger className="w-full sm:w-auto border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring focus:ring-blue-200 focus:ring-opacity-50 transition duration-200">
                   <SelectValue placeholder="Department" />
                 </SelectTrigger>
                 <SelectContent>
@@ -726,7 +792,7 @@ const DPRPage = () => {
             </div>
             <Button
               onClick={handlePrint}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md flex items-center gap-2"
+              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md flex items-center gap-2 w-full sm:w-auto"
             >
               <Printer className="h-4 w-4" />
               Print DPR
@@ -735,21 +801,21 @@ const DPRPage = () => {
         </div>
 
         {/* Summary Banner */}
-        <div className="bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg p-6 text-white shadow-lg">
-          <div className="flex flex-col md:flex-row items-center justify-between">
+        <div className="bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg p-5 sm:p-6 text-white shadow-lg">
+          <div className="flex flex-col md:flex-row items-center justify-between text-center md:text-left">
             <div>
-              <h2 className="text-2xl font-bold mb-2">Daily Service Summary</h2>
-              <p className="text-blue-100">Complete overview of all hospital services for {format(parseISO(selectedDate), 'EEEE, MMMM dd, yyyy')}</p>
+              <h2 className="text-xl sm:text-2xl font-bold mb-1 sm:mb-2">Daily Service Summary</h2>
+              <p className="text-blue-100 text-sm sm:text-base">Complete overview of all hospital services for {format(parseISO(selectedDate), 'EEEE, MMMM dd, yyyy')}</p>
             </div>
-            <div className="mt-4 md:mt-0 text-center md:text-right">
-              <div className="text-3xl font-bold">{kpiData.totalOPDAppointments + kpiData.totalIPDAdmissions}</div>
+            <div className="mt-3 md:mt-0 text-center md:text-right">
+              <div className="text-3xl sm:text-4xl font-bold">{kpiData.totalOPDAppointments + kpiData.totalIPDAdmissions}</div>
               <div className="text-blue-100 text-sm">Total Patients</div>
             </div>
           </div>
         </div>
 
         {/* KPI Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
           <Card className="hover:shadow-lg transition-shadow duration-300 ease-in-out border border-blue-100 bg-blue-50">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium text-blue-800">Total OPD Appointments</CardTitle>
@@ -759,7 +825,7 @@ const DPRPage = () => {
               <div className="text-3xl font-bold text-blue-900">{kpiData.totalOPDAppointments}</div>
               <p className="text-xs text-blue-600 mt-1">Appointments on {format(parseISO(selectedDate), 'MMM dd')}</p>
               {/* NEW: OPD Breakdown for UI */}
-              <div className="grid grid-cols-2 gap-2 mt-2">
+              <div className="grid grid-cols-3 gap-2 mt-2">
                 <div className="text-center">
                   <div className="text-sm font-semibold text-red-600">{kpiData.totalCasualtyOPD}</div>
                   <p className="text-xs text-red-600">Casualty</p>
@@ -767,6 +833,10 @@ const DPRPage = () => {
                 <div className="text-center">
                   <div className="text-sm font-semibold text-indigo-600">{kpiData.totalConsultantOPD}</div>
                   <p className="text-xs text-indigo-600">Consultant</p>
+                </div>
+                <div className="text-center">
+                  <div className="text-sm font-semibold text-amber-600">{kpiData.totalOtherOPD}</div>
+                  <p className="text-xs text-amber-600">Other</p>
                 </div>
               </div>
             </CardContent>
@@ -869,29 +939,29 @@ const DPRPage = () => {
             <CardTitle className="text-xl font-semibold text-gray-800">Service Breakdown Summary ({format(parseISO(selectedDate), 'dd-MM-yyyy')})</CardTitle>
           </CardHeader>
           <CardContent className="pt-6">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-              <div className="text-center p-4 bg-blue-50 rounded-lg border border-blue-200 hover:shadow-md transition-all duration-200 hover:scale-105">
-                <div className="text-2xl font-bold text-blue-700">{kpiData.totalCasualtyOPD}</div>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 sm:gap-6">
+              <div className="text-center p-3 sm:p-4 bg-blue-50 rounded-lg border border-blue-200 hover:shadow-md transition-all duration-200 hover:scale-105">
+                <div className="text-xl sm:text-2xl font-bold text-blue-700">{kpiData.totalCasualtyOPD}</div>
                 <div className="text-sm font-medium text-blue-600">Casualty Services</div>
                 <div className="text-xs text-blue-500 mt-1">Emergency & Walk-in</div>
               </div>
-              <div className="text-center p-4 bg-indigo-50 rounded-lg border border-indigo-200 hover:shadow-md transition-all duration-200 hover:scale-105">
-                <div className="text-2xl font-bold text-indigo-700">{kpiData.totalConsultantOPD}</div>
+              <div className="text-center p-3 sm:p-4 bg-indigo-50 rounded-lg border border-indigo-200 hover:shadow-md transition-all duration-200 hover:scale-105">
+                <div className="text-xl sm:text-2xl font-bold text-indigo-700">{kpiData.totalConsultantOPD}</div>
                 <div className="text-sm font-medium text-indigo-600">Consultation Services</div>
                 <div className="text-xs text-indigo-500 mt-1">Scheduled Appointments</div>
               </div>
-              <div className="text-center p-4 bg-amber-50 rounded-lg border border-amber-200 hover:shadow-md transition-all duration-200 hover:scale-105">
-                <div className="text-2xl font-bold text-amber-700">{kpiData.totalXray}</div>
+              <div className="text-center p-3 sm:p-4 bg-amber-50 rounded-lg border border-amber-200 hover:shadow-md transition-all duration-200 hover:scale-105">
+                <div className="text-xl sm:text-2xl font-bold text-amber-700">{kpiData.totalXray}</div>
                 <div className="text-sm font-medium text-amber-600">X-ray Services</div>
                 <div className="text-xs text-amber-500 mt-1">Diagnostic Imaging</div>
               </div>
-              <div className="text-center p-4 bg-cyan-50 rounded-lg border border-cyan-200 hover:shadow-md transition-all duration-200 hover:scale-105">
-                <div className="text-2xl font-bold text-cyan-700">{kpiData.totalDialysis}</div>
+              <div className="text-center p-3 sm:p-4 bg-cyan-50 rounded-lg border border-cyan-200 hover:shadow-md transition-all duration-200 hover:scale-105">
+                <div className="text-xl sm:text-2xl font-bold text-cyan-700">{kpiData.totalDialysis}</div>
                 <div className="text-sm font-medium text-cyan-600">Dialysis Services</div>
                 <div className="text-xs text-cyan-500 mt-1">Kidney Treatment</div>
               </div>
-              <div className="text-center p-4 bg-rose-50 rounded-lg border border-rose-200 hover:shadow-md transition-all duration-200 hover:scale-105">
-                <div className="text-2xl font-bold text-rose-700">{kpiData.totalPathology}</div>
+              <div className="text-center p-3 sm:p-4 bg-rose-50 rounded-lg border border-rose-200 hover:shadow-md transition-all duration-200 hover:scale-105">
+                <div className="text-xl sm:text-2xl font-bold text-rose-700">{kpiData.totalPathology}</div>
                 <div className="text-sm font-medium text-rose-600">Pathology Tests</div>
                 <div className="text-xs text-rose-500 mt-1">Daily Lab Count</div>
               </div>
@@ -909,19 +979,19 @@ const DPRPage = () => {
               <Table className="min-w-full divide-y divide-gray-200">
                 <TableHeader className="bg-gray-50">
                   <TableRow>
-                    <TableHead className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ward/Type</TableHead>
-                    <TableHead className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Beds</TableHead>
-                    <TableHead className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Occupied</TableHead>
-                    <TableHead className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Available</TableHead>
+                    <TableHead className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ward/Type</TableHead>
+                    <TableHead className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Beds</TableHead>
+                    <TableHead className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Occupied</TableHead>
+                    <TableHead className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Available</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody className="bg-white divide-y divide-gray-200">
                   {bedManagement.map((ward, index) => (
                     <TableRow key={index} className="hover:bg-gray-50 transition-colors duration-200">
-                      <TableCell className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{ward.wardName}</TableCell>
-                      <TableCell className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{ward.totalBeds}</TableCell>
-                      <TableCell className="px-6 py-4 whitespace-nowrap text-sm text-green-600 font-semibold">{ward.occupiedBeds}</TableCell>
-                      <TableCell className="px-6 py-4 whitespace-nowrap text-sm text-blue-600 font-semibold">{ward.availableBeds}</TableCell>
+                      <TableCell className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">{ward.wardName}</TableCell>
+                      <TableCell className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{ward.totalBeds}</TableCell>
+                      <TableCell className="px-4 py-3 whitespace-nowrap text-sm text-green-600 font-semibold">{ward.occupiedBeds}</TableCell>
+                      <TableCell className="px-4 py-3 whitespace-nowrap text-sm text-blue-600 font-semibold">{ward.availableBeds}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

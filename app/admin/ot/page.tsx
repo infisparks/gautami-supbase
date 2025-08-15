@@ -55,18 +55,12 @@ interface OtDetailsSupabase {
   ot_date: string; // ISO string
   created_at: string; // Creation timestamp (not used for date filtering)
   doctor_id: number | null;
-  has_baby_birth: boolean | null; // New field for baby birth option
-  baby_birth_date: string | null; // New field
-  baby_birth_weight: number | null; // New field
-  baby_birth_gender: "Male" | "Female" | "Other" | null; // New field
 }
 
 interface DoctorSupabase {
   id: number;
   dr_name: string;
   department: string;
-  specialist: any | null;
-  charges: any | null;
 }
 
 interface OTRecordWithDetails extends OtDetailsSupabase {
@@ -79,7 +73,6 @@ interface OTFilters {
   doctorId: number | 'All';
   startDate: string; // YYYY-MM-DD format
   endDate: string;   // YYYY-MM-DD format
-  showBabyBirthOnly: boolean; // New filter field
 }
 
 interface DailyOTCountData {
@@ -103,7 +96,6 @@ export default function OTBreakdownPage() {
     doctorId: 'All',
     startDate: today,
     endDate: today,
-    showBabyBirthOnly: false, // Initialize new filter
   });
 
   // NEW: State to hold the debounced search term
@@ -149,8 +141,7 @@ export default function OTBreakdownPage() {
     const total = otRecords.length;
     const major = otRecords.filter(r => r.ot_type === 'Major').length;
     const minor = otRecords.filter(r => r.ot_type === 'Minor').length;
-    const babyBirths = otRecords.filter(r => r.has_baby_birth).length; // New: Count baby births
-    return { total, major, minor, babyBirths };
+    return { total, major, minor };
   }, [otRecords]);
 
   const otsByDoctor = useMemo(() => {
@@ -184,8 +175,6 @@ export default function OTBreakdownPage() {
             id: doc.id,
             dr_name: doc.dr_name,
             department: doc.department,
-            specialist: doc.specialist ?? "",
-            charges: doc.charges ?? 0,
           }))
         );
       }
@@ -202,10 +191,6 @@ export default function OTBreakdownPage() {
           ot_date,
           created_at,
           doctor_id,
-          has_baby_birth,
-          baby_birth_date,
-          baby_birth_weight,
-          baby_birth_gender,
           patient_detail:uhid (name, uhid, age, gender, age_unit)
         `);
 
@@ -220,9 +205,6 @@ export default function OTBreakdownPage() {
       }
       if (filters.endDate) {
         query = query.lte('ot_date', filters.endDate + 'T23:59:59.999');
-      }
-      if (filters.showBabyBirthOnly) {
-        query = query.eq('has_baby_birth', true);
       }
 
       query = query.order('ot_date', { ascending: false });
@@ -261,7 +243,7 @@ export default function OTBreakdownPage() {
     } finally {
       setLoading(false);
     }
-  }, [filters.otType, filters.doctorId, filters.startDate, filters.endDate, debouncedSearchTerm, filters.showBabyBirthOnly]); // Dependencies now include debouncedSearchTerm
+  }, [filters.otType, filters.doctorId, filters.startDate, filters.endDate, debouncedSearchTerm]); // Dependencies now include debouncedSearchTerm
 
   // Effect hook to trigger data fetching
   useEffect(() => {
@@ -294,7 +276,6 @@ export default function OTBreakdownPage() {
       doctorId: 'All',
       startDate: today,
       endDate: today,
-      showBabyBirthOnly: false, // Also clear the new filter
     });
     setDebouncedSearchTerm(''); // Also clear the debounced term immediately
   };
@@ -387,19 +368,6 @@ export default function OTBreakdownPage() {
                       ))}
                     </select>
                   </div>
-                  <div className="flex items-center">
-                    <input
-                      type="checkbox"
-                      id="showBabyBirthOnly"
-                      name="showBabyBirthOnly"
-                      checked={filters.showBabyBirthOnly}
-                      onChange={handleFilterChange}
-                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                    />
-                    <label htmlFor="showBabyBirthOnly" className="ml-2 text-sm font-medium text-gray-700">
-                      Show only Baby Births
-                    </label>
-                  </div>
                 </div>
                 <div>
                     <label htmlFor="searchTerm" className="block text-sm font-medium text-gray-700 mb-1">Search Patient (Name/UHID)</label>
@@ -464,17 +432,6 @@ export default function OTBreakdownPage() {
                       <Stethoscope size={24} />
                     </div>
                   </div>
-                  {otSummary.babyBirths > 0 && (
-                    <div className="bg-white rounded-xl shadow-md p-5 border border-blue-100 flex items-center justify-between">
-                      <div>
-                        <p className="text-sm text-gray-500">Baby Births</p>
-                        <p className="text-3xl font-bold text-gray-800">{otSummary.babyBirths}</p>
-                      </div>
-                      <div className="p-3 rounded-full bg-pink-100 text-pink-600">
-                        <User size={24} /> {/* Using User icon for baby birth, can be changed */}
-                      </div>
-                    </div>
-                  )}
                 </div>
               </section>
 
@@ -537,10 +494,6 @@ export default function OTBreakdownPage() {
                           <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created At</th>
                           <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Operating Doctor</th>
                           <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Notes</th>
-                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Baby Birth</th>
-                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Baby Birth Date</th>
-                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Baby Birth Weight</th>
-                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Baby Gender</th>
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-200">
@@ -570,18 +523,6 @@ export default function OTBreakdownPage() {
                               {doctors.find(doc => doc.id === record.doctor_id)?.dr_name || 'Not Selected'}
                             </td>
                             <td className="px-6 py-4 text-sm text-gray-500 max-w-xs truncate">{record.ot_notes || 'No notes'}</td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                              {record.has_baby_birth ? 'Yes' : 'No'}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                              {record.has_baby_birth && record.baby_birth_date ? format(parseISO(record.baby_birth_date), 'dd MMM, yyyy') : 'N/A'}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                              {record.has_baby_birth && record.baby_birth_weight !== null ? `${record.baby_birth_weight} kg` : 'N/A'}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                              {record.has_baby_birth && record.baby_birth_gender ? record.baby_birth_gender : 'N/A'}
-                            </td>
                           </motion.tr>
                         ))}                      </tbody>
                     </table>

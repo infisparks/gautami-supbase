@@ -1459,7 +1459,7 @@ const DashboardPage: React.FC = () => {
                   <Activity className="text-white h-6 w-6" />
                 </div>
                 <h1 className="text-2xl font-bold bg-gradient-to-r from-sky-600 to-blue-600 bg-clip-text text-transparent">
-                G-MEDFORD-NX HOSPITAL
+                  MEDFORD HOSPITAL
                 </h1>
               </div>
               <div className="relative w-full md:w-1/3">
@@ -1593,16 +1593,17 @@ const DashboardPage: React.FC = () => {
                     />
                     <label htmlFor="showOnlyOt" className="ml-2 text-sm font-medium text-gray-700">Show only OT</label>
                   </div>
-                  <div className="flex items-center">
+                  {/* <div className="flex items-center">
                     <input
                       type="checkbox"
                       id="showOnlyBabyBirth"
+                      name="showOnlyBabyBirth"
                       checked={filters.showOnlyBabyBirth}
-                      onChange={(e) => handleFilterChange({ showOnlyBabyBirth: e.target.checked, showOnlyOpd: false, showOnlyIpd: false, showOnlyOt: false })}
-                      className="h-4 w-4 text-teal-600 focus:ring-teal-500 border-gray-300 rounded"
+                      onChange={handleFilterToggleChange}
+                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
                     />
                     <label htmlFor="showOnlyBabyBirth" className="ml-2 text-sm font-medium text-gray-700">Show only Baby Birth</label>
-                  </div>
+                  </div> */}
                 </div>
                 <div className="mt-4 p-3 bg-gradient-to-r from-sky-50 to-blue-50 rounded-lg border border-sky-200 shadow-sm">
                   <div className="flex items-center justify-between">
@@ -1684,7 +1685,7 @@ const DashboardPage: React.FC = () => {
                     </div>
                   </Card>
                   {/* Baby Births Card */}
-                  {statistics.totalBabyBirths > 0 && (
+                  {/* {statistics.totalBabyBirths > 0 && (
                     <Card className="bg-white shadow-lg rounded-xl p-6 border border-gray-100 hover:shadow-xl transition-shadow">
                       <div className="flex items-center justify-between mb-4">
                         <div className="p-3 bg-gradient-to-r from-teal-100 to-cyan-100 rounded-full shadow-md">
@@ -1700,7 +1701,7 @@ const DashboardPage: React.FC = () => {
                         <span className="text-lg font-semibold text-teal-600">{statistics.totalBabyBirths}</span>
                       </div>
                     </Card>
-                  )}
+                  )} */}
                   {/* Total Revenue */}
                   <Card className="bg-white shadow-lg rounded-xl p-6 border border-gray-100 hover:shadow-xl transition-shadow">
                     <div className="flex items-center justify-between mb-4">
