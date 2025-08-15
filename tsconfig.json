@@ -1,0 +1,48 @@
+{
+  "compilerOptions": {
+    /* ---------- core ---------- */
+    "target": "es2020",                   // modern enough for dynamic-import & optional-chaining
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "module": "esnext",
+    "moduleResolution": "bundler",        // keep Next-recommended setting
+    "jsx": "preserve",
+
+    /* ---------- strictness / emit ---------- */
+    "strict": true,
+    "noEmit": true,
+    "incremental": true,
+
+    /* ---------- JS / interop ---------- */
+    "allowJs": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true, // NEW – helps with many ESM packages
+
+    /* ---------- type hygiene ---------- */
+    "skipLibCheck": true,                 // already present – keeps build fast
+    "typeRoots": ["./node_modules/@types"], // NEW – pick only one copy of @types/*
+    "types": ["react", "react-dom", "node"], // NEW – pin React types so nested duplicates aren’t loaded
+
+    /* ---------- misc ---------- */
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+
+    /* ---------- tooling ---------- */
+    "plugins": [
+      { "name": "next" }
+    ],
+
+    /* ---------- path aliases ---------- */
+    "paths": {
+      "@/*": ["./*"]
+    }
+  },
+
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts"
+  ],
+
+  "exclude": ["node_modules"]
+}
