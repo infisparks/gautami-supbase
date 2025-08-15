@@ -68,7 +68,8 @@ interface PaymentDetailItem {
   amount: number;
   createdAt: string;
   paymentType: string;
-  through: string; // Changed to required string to match PDF interface
+  through: string;
+  amountType?: string; // Add this line
 }
 
 interface ServiceDetailItem {
@@ -483,17 +484,34 @@ const IPDAppointmentEditPage = ({ params }: IPDAppointmentEditPageProps) => {
         throw new Error("Patient UHID is missing for update operation. This record cannot be updated without a UHID.");
       }
 
-      const paymentDetail: PaymentDetailItem[] = [];
+      // Ensure paymentDetail is initialized correctly
+      let paymentDetail: PaymentDetailItem[] = formData.paymentDetails ? [...formData.paymentDetails] : [];
       const depositAmount = formData.depositAmount ? Number.parseFloat(String(formData.depositAmount)) : 0;
+
+      // Find existing deposit entry
+      const existingDepositIndex = paymentDetail.findIndex(p => p.type === "deposit");
+
       if (depositAmount > 0) {
-        paymentDetail.push({
+        const newDepositEntry: PaymentDetailItem = {
           date: new Date().toISOString(),
           type: "deposit",
+          amountType:"deposit",
           amount: depositAmount,
           createdAt: new Date().toISOString(),
           paymentType: formData.paymentMode,
           through: formData.paymentThrough, // Save the 'through' value
-        });
+        };
+
+        if (existingDepositIndex !== -1) {
+          // Update existing deposit entry
+          paymentDetail[existingDepositIndex] = newDepositEntry;
+        } else {
+          // Add new deposit entry
+          paymentDetail.push(newDepositEntry);
+        }
+      } else if (existingDepositIndex !== -1) {
+        // If depositAmount is 0 or null, and a deposit entry exists, remove it
+        paymentDetail.splice(existingDepositIndex, 1);
       }
 
       const serviceDetail: ServiceDetailItem[] = [];
@@ -1262,10 +1280,21 @@ const IPDAppointmentEditPage = ({ params }: IPDAppointmentEditPageProps) => {
                   roomType: formData.roomType,
                   date: formData.date,
                   time: formData.time,
-                  paymentDetails: formData.paymentDetails?.map(payment => ({
-                    ...payment,
-                    through: payment.through || "cash" // Ensure through always has a value
-                  })) || null,
+                  paymentDetails: formData.paymentDetails
+                    ? formData.paymentDetails.map(payment => ({
+                        ...payment,
+                        through: payment.through || "cash", // Ensure through always has a value
+                        amountType: (
+                          payment.amountType === "deposit" ||
+                          payment.amountType === "advance" ||
+                          payment.amountType === "settlement" ||
+                          payment.amountType === "refund" ||
+                          payment.amountType === "discount"
+                        )
+                          ? payment.amountType
+                          : undefined
+                      }))
+                    : null,
                   serviceDetails: formData.serviceDetails,
                 }}
                 genderOptions={genderOptions}
