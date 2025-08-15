@@ -6,6 +6,8 @@ import { supabase } from "@/lib/supabase" // Using Supabase client
 import {
   format,
   parseISO, // For parsing ISO date strings from DB
+  startOfDay,
+  endOfDay,
 } from "date-fns"
 
 import {
@@ -13,6 +15,7 @@ import {
   Layers,
   CreditCard,
   DollarSign,
+  CalendarIcon,
 } from "lucide-react"
 
 // Shadcn/ui components
@@ -26,6 +29,14 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog" // Import Dialog components
 import Layout from "@/components/global/Layout"; // Import Layout component
+import { Calendar } from "@/components/ui/calendar" // Import Calendar component
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
+import { Button } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
 
 import { useRouter } from 'next/navigation'; // Import useRouter
 
@@ -51,6 +62,7 @@ interface OPDRegistrationSupabase {
   service_info: IModality[] | null // JSONB
   payment_info: IPayment | null // JSONB
   uhid: string; // Add uhid to OPDRegistrationSupabase
+  created_at?: string; // Add created_at
 }
 
 // IPD Payment (from IPD `payment_detail` JSONB)
@@ -184,9 +196,9 @@ const DailyCollectionPage: React.FC = () => {
       try {
         const { data: opdData, error: opdError } = await supabase
           .from("opd_registration")
-          .select("payment_info, date, uhid, opd_id")
-          .gte("date", startIST)
-          .lt("date", endIST);
+          .select("payment_info, date, uhid, opd_id, created_at") // Select created_at
+          .gte("created_at", startIST) // Filter by created_at
+          .lt("created_at", endIST);   // Filter by created_at
 
         if (opdError) {
           console.error("Supabase OPD fetch error:", opdError);
@@ -264,9 +276,9 @@ const DailyCollectionPage: React.FC = () => {
     try {
       const { data: opdData, error } = await supabase
         .from("opd_registration")
-        .select("opd_id, date, payment_info, uhid")
-        .gte("date", startIST)
-        .lt("date", endIST);
+        .select("opd_id, date, payment_info, uhid, created_at") // Select created_at
+        .gte("created_at", startIST) // Filter by created_at
+        .lt("created_at", endIST);   // Filter by created_at
 
       if (error) throw error;
 
@@ -310,9 +322,9 @@ const DailyCollectionPage: React.FC = () => {
     try {
       const { data: opdData, error } = await supabase
         .from("opd_registration")
-        .select("opd_id, date, payment_info, uhid")
-        .gte("date", startIST)
-        .lt("date", endIST);
+        .select("opd_id, date, payment_info, uhid, created_at") // Select created_at
+        .gte("created_at", startIST) // Filter by created_at
+        .lt("created_at", endIST);   // Filter by created_at
 
       if (error) throw error;
 
@@ -489,6 +501,32 @@ const DailyCollectionPage: React.FC = () => {
                 Date: <span className="ml-2 text-green-700">{currentDisplayDate}</span>
               </div>
               <div className="flex space-x-2 mt-4 md:mt-0">
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant={"outline"}
+                      className={cn(
+                        "w-[240px] justify-start text-left font-normal",
+                        !selectedDate && "text-muted-foreground"
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {selectedDate ? format(selectedDate, "PPP") : <span className="ml-2 text-gray-600">Pick a date</span>}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={selectedDate}
+                      onSelect={(date) => {
+                        if (date) {
+                          setSelectedDate(date);
+                        }
+                      }}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
                 <button
                   onClick={() => setSelectedDate(new Date())}
                   className="px-4 py-2 bg-emerald-500 text-white rounded-md hover:bg-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2"
@@ -687,6 +725,9 @@ const DailyCollectionPage: React.FC = () => {
                       <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Amount
                       </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Date
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
@@ -707,6 +748,9 @@ const DailyCollectionPage: React.FC = () => {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-900">
                           {formatCurrency(tx.payment_info.cashAmount)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-800">
+                          {tx.date ? format(parseISO(tx.date), "dd MMM yyyy") : "N/A"}
                         </td>
                       </tr>
                     ))}
@@ -750,6 +794,9 @@ const DailyCollectionPage: React.FC = () => {
                       <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Amount
                       </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Date
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
@@ -770,6 +817,9 @@ const DailyCollectionPage: React.FC = () => {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-900">
                           {formatCurrency(tx.payment_info.onlineAmount)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-800">
+                          {tx.date ? format(parseISO(tx.date), "dd MMM yyyy") : "N/A"}
                         </td>
                       </tr>
                     ))}
@@ -816,6 +866,9 @@ const DailyCollectionPage: React.FC = () => {
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Type
                       </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Date
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
@@ -839,6 +892,9 @@ const DailyCollectionPage: React.FC = () => {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-800">
                           {tx.payment_item.type}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-800">
+                          {tx.payment_item.createdAt ? format(parseISO(tx.payment_item.createdAt), "dd MMM yyyy") : "N/A"}
                         </td>
                       </tr>
                     ))}
@@ -888,6 +944,9 @@ const DailyCollectionPage: React.FC = () => {
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Type
                       </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Date
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
@@ -914,6 +973,9 @@ const DailyCollectionPage: React.FC = () => {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-800">
                           {tx.payment_item.type}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-800">
+                          {tx.payment_item.createdAt ? format(parseISO(tx.payment_item.createdAt), "dd MMM yyyy") : "N/A"}
                         </td>
                       </tr>
                     ))}
