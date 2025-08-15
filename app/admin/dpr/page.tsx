@@ -296,35 +296,22 @@ const DPRPage = () => {
       // Fetch X-ray count from external API
       let totalXray = 0;
       try {
-        const xrayApiDate = format(parseISO(selectedDate), 'dd-MM-yyyy');
-        const hospitalName = process.env.NEXT_PUBLIC_LAB_HOSPITAL_NAME || '';
-
-        const res = await fetch('https://labapi.infispark.in/rest/v1/rpc/get_registration_count_xray', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'apikey': process.env.NEXT_PUBLIC_LAB_API_KEY || '',
-            'Authorization': `Bearer ${process.env.NEXT_PUBLIC_LAB_API_KEY}` || '',
-          },
-          body: JSON.stringify({ p_date: xrayApiDate, p_hospital: hospitalName })
-        });
-
-        if (res.ok) {
-          const json = await res.json();
-          // Assuming the API returns an array with the count in the first element
-          if (typeof json === 'number') {
-            totalXray = json;
-          } else if (json && Array.isArray(json) && json.length > 0 && typeof json[0].count === 'number') {
-            totalXray = json[0].count;
-          } else {
-            console.warn('X-ray API response format unexpected:', json);
-          }
-        } else {
-          console.warn('Failed to fetch X-ray count from API:', res.status, res.statusText);
-        }
-      } catch (e) {
-        console.warn('Error while fetching X-ray count:', e);
-      }
+         const res = await fetch('/api/lab/xray-count', {
+           method: 'POST',
+           headers: { 'Content-Type': 'application/json' },
+           body: JSON.stringify({ date: selectedDate })
+         })
+         if (res.ok) {
+           const json = await res.json()
+           if (json && typeof json.count === 'number') {
+             totalXray = json.count
+           }
+         } else {
+           console.warn('Failed to fetch X-ray count')
+         }
+       } catch (e) {
+         console.warn('Error while fetching X-ray count', e)
+       }
 
       setKpiData({
         totalOPDAppointments: finalTotalOPDAppointments,

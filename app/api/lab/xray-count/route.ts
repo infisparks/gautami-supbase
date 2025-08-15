@@ -1,39 +1,72 @@
-import { headers } from "next/headers";
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from 'next/server'
+import { format, parseISO } from 'date-fns';
 
-export async function POST(req: Request) {
-  const { p_date } = await req.json();
+function formatDateToDMy(dateInput: string): string {
+  const date = new Date(dateInput)
+  const day = date.getDate()
+  const month = date.getMonth() + 1
+  const year = date.getFullYear()
+  return `${day}-${month}-${year}`
+}
 
+export async function POST(request: NextRequest) {
   try {
-    const response = await fetch(
-      "https://labapi.infispark.in/rest/v1/rpc/get_registration_count_xray",
-      {
-        method: "POST",
-        headers: {
-          apikey: process.env.LAB_API_KEY as string,
-          Authorization: process.env.LAB_API_KEY as string,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ p_date, p_hospital: process.env.LAB_HOSPITAL_NAME }),
-      }
-    );
+    const body = await request.json().catch(() => ({})) as { date?: string; hospital?: string }
+    const isoDate = body?.date || new Date().toISOString().slice(0, 10)
+    const hospitalName = body?.hospital || process.env.LAB_HOSPITAL_NAME || ''
 
-    if (!response.ok) {
-      const errorData = await response.json();
-      console.error("Error from external API:", errorData);
-      return NextResponse.json(
-        { message: "Error fetching X-ray count", error: errorData },
-        { status: response.status }
-      );
+    if (!hospitalName) {
+      return NextResponse.json({ error: 'LAB_HOSPITAL_NAME is not configured' }, { status: 500 })
     }
 
-    const data = await response.json();
-    return NextResponse.json(data);
-  } catch (error) {
-    console.error("Internal server error:", error);
-    return NextResponse.json(
-      { message: "Internal server error" },
-      { status: 500 }
-    );
+    const apiBaseUrl = process.env.LAB_API_URL || 'https://labapi.infispark.in'
+    const apiKey = process.env.LAB_API_KEY || process.env.LAB_API_ANON_KEY
+    const bearer = process.env.LAB_API_BEARER || apiKey
+
+    if (!apiKey || !bearer) {
+      return NextResponse.json({ error: 'LAB_API credentials are not configured' }, { status: 500 })
+    }
+
+    const formatted = formatDateToDMy(isoDate)
+    const url = `${apiBaseUrl}/rest/v1/rpc/get_registration_count_xray` // Specific X-ray endpoint
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'apikey': apiKey,
+        'Authorization': `Bearer ${bearer}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ p_date: formatted, p_hospital: hospitalName })
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      return NextResponse.json({ error: 'Failed to fetch X-ray count', details: errorText }, { status: response.status })
+    }
+
+    let count: number = 0
+    const contentType = response.headers.get('content-type') || ''
+    if (contentType.includes('application/json')) {
+      const data = await response.json()
+      if (typeof data === 'number') {
+        count = data
+      } else if (Array.isArray(data) && data.length > 0 && typeof data[0].count === 'number') {
+        count = data[0].count
+      } else if (data && typeof data.count === 'number') {
+        count = data.count
+      } else {
+        // last resort: try to coerce a primitive value
+        count = Number(data)
+      }
+    } else {
+      const text = await response.text()
+      const coerced = Number(text)
+      count = Number.isFinite(coerced) ? coerced : 0
+    }
+
+    return NextResponse.json({ count })
+  } catch (error: any) {
+    return NextResponse.json({ error: 'Unexpected error', details: error?.message || String(error) }, { status: 500 })
   }
 }

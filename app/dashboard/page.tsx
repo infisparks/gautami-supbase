@@ -1459,7 +1459,7 @@ const DashboardPage: React.FC = () => {
                   <Activity className="text-white h-6 w-6" />
                 </div>
                 <h1 className="text-2xl font-bold bg-gradient-to-r from-sky-600 to-blue-600 bg-clip-text text-transparent">
-                  MEDFORD HOSPITAL
+                  G - MEDFORD NX HOSPITAL
                 </h1>
               </div>
               <div className="relative w-full md:w-1/3">
