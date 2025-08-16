@@ -23,12 +23,16 @@ export default function BulkServiceModal({ isOpen, onClose, onAddServices, gemin
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isConfirmed, setIsConfirmed] = useState(false)
+  const [consultantServices, setConsultantServices] = useState<ParsedServiceItem[]>([])
+  const [otherServices, setOtherServices] = useState<ParsedServiceItem[]>([])
 
   const handleParseMessage = async () => {
     setError(null)
     setLoading(true)
     setParsedServices([])
     setIsConfirmed(false)
+    setConsultantServices([])
+    setOtherServices([])
 
     if (!message.trim()) {
       setError("Please enter a message to parse.")
@@ -37,7 +41,7 @@ export default function BulkServiceModal({ isOpen, onClose, onAddServices, gemin
     }
 
     const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`
-    const prompt = `Extract an array of JSON objects, each with "serviceName" (string), "quantity" (number), and "amount" (number) from this message. If quantity is not specified, assume 1. If amount is not specified, assume 0. Assume all extracted services are of type "service" unless explicitly stated otherwise (e.g., "doctor visit"). If a service is a doctor visit, set its type to "doctorvisit" and include a "doctorName" (string) field. Ensure the output is a valid JSON array.
+    const prompt = `Extract an array of JSON objects, each with "serviceName" (string), "quantity" (number), and "amount" (number) from this message. If quantity is not specified, assume 1. If amount is not specified, assume 0. Categorize services into two types: "doctorvisit" if the service name explicitly includes "Dr." or "doctor" followed by a name (e.g., "Dr. Sharma's Visit", "Doctor Consultation with Dr. Smith"), and "service" for all other items. If the type is "doctorvisit", extract the doctor's full name into a separate "doctorName" (string) field. Ensure the output is a valid JSON array.
 
     Example 1: "2x X-ray 1500, Blood Test 500, 3x Dressing 200"
     Output 1: [{"serviceName": "X-ray", "quantity": 2, "amount": 1500, "type": "service"}, {"serviceName": "Blood Test", "quantity": 1, "amount": 500, "type": "service"}, {"serviceName": "Dressing", "quantity": 3, "amount": 200, "type": "service"}]
@@ -47,6 +51,9 @@ export default function BulkServiceModal({ isOpen, onClose, onAddServices, gemin
 
     Example 3: "CT Scan 2500, 2x Injection 150, Doctor Visit Dr. Sharma 500"
     Output 3: [{"serviceName": "CT Scan", "quantity": 1, "amount": 2500, "type": "service"}, {"serviceName": "Injection", "quantity": 2, "amount": 150, "type": "service"}, {"serviceName": "Doctor Visit", "quantity": 1, "amount": 500, "type": "doctorvisit", "doctorName": "Dr. Sharma"}]
+
+    Example 4: "Dr. Singh's Consultation 700, Lab Test 300"
+    Output 4: [{"serviceName": "Dr. Singh's Consultation", "quantity": 1, "amount": 700, "type": "doctorvisit", "doctorName": "Dr. Singh"}, {"serviceName": "Lab Test", "quantity": 1, "amount": 300, "type": "service"}]
 
     Now, extract from this message: "${message}"`
 
@@ -100,6 +107,8 @@ export default function BulkServiceModal({ isOpen, onClose, onAddServices, gemin
       }));
 
       setParsedServices(servicesWithIds)
+      setConsultantServices(servicesWithIds.filter(service => service.type === "doctorvisit"))
+      setOtherServices(servicesWithIds.filter(service => service.type === "service"))
     } catch (err: any) {
       console.error("Error parsing message with Gemini:", err)
       setError(`Failed to parse message: ${err.message || "Unknown error"}. Please check your input and API key.`)
@@ -120,6 +129,8 @@ export default function BulkServiceModal({ isOpen, onClose, onAddServices, gemin
         setMessage("")
         setParsedServices([])
         setIsConfirmed(false)
+        setConsultantServices([])
+        setOtherServices([])
       }, 1000)
     } catch (err: any) {
       console.error("Error adding bulk services:", err)
@@ -132,6 +143,8 @@ export default function BulkServiceModal({ isOpen, onClose, onAddServices, gemin
 
   const handleRemoveService = (idToRemove: string) => {
     setParsedServices((prevServices) => prevServices.filter((service) => service.id !== idToRemove))
+    setConsultantServices((prevServices) => prevServices.filter((service) => service.id !== idToRemove))
+    setOtherServices((prevServices) => prevServices.filter((service) => service.id !== idToRemove))
   }
 
   return (
@@ -218,68 +231,111 @@ export default function BulkServiceModal({ isOpen, onClose, onAddServices, gemin
                       transition={{ duration: 0.2 }}
                       className="mt-4"
                     >
-                      <h4 className="text-lg font-semibold text-gray-800 mb-3">Parsed Services Preview:</h4>
-                      <div className="overflow-x-auto bg-white rounded-lg border border-gray-200">
-                        <table className="min-w-full divide-y divide-gray-200">
-                          <thead className="bg-gray-50">
-                            <tr>
-                              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Service Name
-                              </th>
-                              <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Qty
-                              </th>
-                              <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Amount (₹)
-                              </th>
-                              <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Type
-                              </th>
-                              {/* Conditionally show Doctor Name column if any service is 'doctorvisit' */}
-                              {parsedServices.some(s => s.type === 'doctorvisit') && (
-                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                  Doctor Name
-                                </th>
-                              )}
-                              <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Action
-                              </th>
-                            </tr>
-                          </thead>
-                          <tbody className="bg-white divide-y divide-gray-200">
-                            {parsedServices.map((service) => (
-                              <tr key={service.id} className="hover:bg-gray-50">
-                                <td className="px-4 py-2 whitespace-nowrap text-sm font-medium text-gray-900">
-                                  {service.serviceName}
-                                </td>
-                                <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500 text-center">
-                                  {service.quantity}
-                                </td>
-                                <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500 text-right">
-                                  {service.amount.toLocaleString()}
-                                </td>
-                                <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500 text-center capitalize">
-                                  {service.type}
-                                </td>
-                                {parsedServices.some(s => s.type === 'doctorvisit') && (
-                                  <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">
-                                    {service.doctorName || 'N/A'}
-                                  </td>
-                                )}
-                                <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500 text-center">
-                                  <button
-                                    onClick={() => handleRemoveService(service.id)}
-                                    className="text-red-500 hover:text-red-700 transition-colors"
-                                    title="Remove service from list"
-                                  >
-                                    <Trash size={16} />
-                                  </button>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
+                      {consultantServices.length > 0 && (
+                        <div className="mb-6">
+                          <h4 className="text-lg font-semibold text-gray-800 mb-3">Consultant Visits:</h4>
+                          <div className="overflow-x-auto bg-white rounded-lg border border-gray-200">
+                            <table className="min-w-full divide-y divide-gray-200">
+                              <thead className="bg-gray-50">
+                                <tr>
+                                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    Service Name
+                                  </th>
+                                  <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    Qty
+                                  </th>
+                                  <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    Amount (₹)
+                                  </th>
+                                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    Doctor Name
+                                  </th>
+                                  <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    Action
+                                  </th>
+                                </tr>
+                              </thead>
+                              <tbody className="bg-white divide-y divide-gray-200">
+                                {consultantServices.map((service) => (
+                                  <tr key={service.id} className="hover:bg-gray-50">
+                                    <td className="px-4 py-2 whitespace-nowrap text-sm font-medium text-gray-900">
+                                      {service.serviceName}
+                                    </td>
+                                    <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500 text-center">
+                                      {service.quantity}
+                                    </td>
+                                    <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500 text-right">
+                                      {service.amount.toLocaleString()}
+                                    </td>
+                                    <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">
+                                      {service.doctorName || 'N/A'}
+                                    </td>
+                                    <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500 text-center">
+                                      <button
+                                        onClick={() => handleRemoveService(service.id)}
+                                        className="text-red-500 hover:text-red-700 transition-colors"
+                                        title="Remove service from list"
+                                      >
+                                        <Trash size={16} />
+                                      </button>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      )}
+
+                      {otherServices.length > 0 && (
+                        <div className="mb-6">
+                          <h4 className="text-lg font-semibold text-gray-800 mb-3">Other Services:</h4>
+                          <div className="overflow-x-auto bg-white rounded-lg border border-gray-200">
+                            <table className="min-w-full divide-y divide-gray-200">
+                              <thead className="bg-gray-50">
+                                <tr>
+                                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    Service Name
+                                  </th>
+                                  <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    Qty
+                                  </th>
+                                  <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    Amount (₹)
+                                  </th>
+                                  <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    Action
+                                  </th>
+                                </tr>
+                              </thead>
+                              <tbody className="bg-white divide-y divide-gray-200">
+                                {otherServices.map((service) => (
+                                  <tr key={service.id} className="hover:bg-gray-50">
+                                    <td className="px-4 py-2 whitespace-nowrap text-sm font-medium text-gray-900">
+                                      {service.serviceName}
+                                    </td>
+                                    <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500 text-center">
+                                      {service.quantity}
+                                    </td>
+                                    <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500 text-right">
+                                      {service.amount.toLocaleString()}
+                                    </td>
+                                    <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500 text-center">
+                                      <button
+                                        onClick={() => handleRemoveService(service.id)}
+                                        className="text-red-500 hover:text-red-700 transition-colors"
+                                        title="Remove service from list"
+                                      >
+                                        <Trash size={16} />
+                                      </button>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      )}
                       <div className="mt-4 flex justify-end space-x-3">
                         <button
                           type="button"
