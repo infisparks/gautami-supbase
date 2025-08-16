@@ -393,6 +393,16 @@ const DashboardPage: React.FC = () => {
   const [totalDownloadedBytes, setTotalDownloadedBytes] = useState(0)
   const [searchDownloadedBytes, setSearchDownloadedBytes] = useState(0)
 
+  // New state for IPD totals
+  const [ipdTotals, setIpdTotals] = useState<{
+    cash_total: number;
+    online_total: number;
+    online_upi_total: number;
+    online_card_total: number;
+    online_netbanking_total: number;
+    online_cheque_total: number;
+  } | null>(null);
+
   // Compute current date range for the dashboard display and the query
   const currentDateRange = useMemo(() => {
     let range: { start: string; end: string; displayStart: string; displayEnd: string }
@@ -469,6 +479,30 @@ const DashboardPage: React.FC = () => {
     };
     fetchDoctors();
   }, []);
+
+  useEffect(() => {
+    async function fetchTotals() {
+      if (!currentDateRange.start || !currentDateRange.end) {
+        setIpdTotals(null);
+        return;
+      }
+      const { data, error } = await supabase.rpc("get_ipd_total_amount", {
+        start_date: currentDateRange.displayStart,
+        end_date: currentDateRange.displayEnd,
+      });
+
+      if (error) {
+        console.error("Error fetching IPD totals:", error);
+        toast.error("Failed to load IPD totals.");
+        setIpdTotals(null);
+      } else if (data && data.length > 0) {
+        setIpdTotals(data[0]);
+      } else {
+        setIpdTotals(null);
+      }
+    }
+    fetchTotals();
+  }, [currentDateRange]); // Re-run when the date range changes
 
   // Main data fetching logic (combines initial load and filter changes)
   useEffect(() => {
@@ -903,9 +937,9 @@ const DashboardPage: React.FC = () => {
       opdOnline,
       ipdCash,
       ipdOnline,
-      totalRevenue: totalOpdAmt + netIpdContribution, // Total revenue includes net IPD contribution
+      totalRevenue: totalOpdAmt + (ipdTotals?.cash_total || 0) + (ipdTotals?.online_total || 0), // Total revenue includes IPD total collections
     }
-  }, [opdAppointments, ipdAppointments, otAppointments])
+  }, [opdAppointments, ipdAppointments, otAppointments, ipdTotals])
 
   // Combined & filter by date range (search is handled by fetching patientinfo directly)
   const filteredAppointments = useMemo(() => {
@@ -1459,7 +1493,7 @@ const DashboardPage: React.FC = () => {
                   <Activity className="text-white h-6 w-6" />
                 </div>
                 <h1 className="text-2xl font-bold bg-gradient-to-r from-sky-600 to-blue-600 bg-clip-text text-transparent">
-                  G - MEDFORD NX HOSPITAL
+                G-Medford NX HOSPITAL
                 </h1>
               </div>
               <div className="relative w-full md:w-1/3">
@@ -1656,7 +1690,7 @@ const DashboardPage: React.FC = () => {
                     <div className="flex items-center justify-between">
                       <span className="text-sm text-gray-600">Net Deposits</span>
                       <span className="text-lg font-semibold text-orange-600">
-                        {formatCurrency(statistics.totalIpdAmount)}
+                        {formatCurrency(ipdTotals ? ipdTotals.cash_total + ipdTotals.online_total : 0)}
                       </span>
                     </div>
                     {statistics.overallIpdRefunds > 0 && (
@@ -1720,6 +1754,22 @@ const DashboardPage: React.FC = () => {
                       </span>
                     </div>
                   </Card>
+                  {/* IPD Totals Card - REMOVED PER USER INSTRUCTION */}
+                  {/* <Card className="p-6 shadow-lg border border-gray-100 flex flex-col items-center justify-center text-center transition-all duration-300 hover:shadow-xl hover:scale-105 min-h-[180px]">
+                    <Layers className="h-10 w-10 text-orange-500 mb-3" />
+                    <h3 className="text-xl font-semibold text-gray-800 mb-2">IPD Total Collections</h3>
+                    {ipdTotals ? (
+                      <div className="text-sm text-gray-600">
+                        <p><strong>Cash:</strong> {formatCurrency(ipdTotals.cash_total)}</p>
+                        <p><strong>Online:</strong> {formatCurrency(ipdTotals.online_total)}</p>
+                        <p className="text-xs text-gray-500 mt-2">
+                          (UPI: {formatCurrency(ipdTotals.online_upi_total)}, Card: {formatCurrency(ipdTotals.online_card_total)}, Netbanking: {formatCurrency(ipdTotals.online_netbanking_total)}, Cheque: {formatCurrency(ipdTotals.online_cheque_total)})
+                        </p>
+                      </div>
+                    ) : (
+                      <p className="text-gray-500">Loading IPD totals...</p>
+                    )}
+                  </Card> */}
                 </div>
                 {/* Payment Breakdown & Charts */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
@@ -1748,34 +1798,34 @@ const DashboardPage: React.FC = () => {
                       </div>
                       <div className="bg-gradient-to-r from-orange-50 to-red-50 rounded-lg p-4 shadow-sm">
                         <h3 className="font-medium text-orange-800 mb-3">IPD Payments</h3>
-                        <div className="space-y-2">
-                          <div className="flex justify-between items-center">
-                            <span className="text-gray-600 text-sm">💵 Cash</span>
-                            <span className="font-semibold text-orange-600">{formatCurrency(statistics.ipdCash)}</span>
-                          </div>
-                          <div className="flex justify-between items-center">
-                            <span className="text-gray-600 text-sm">💳 Online</span>
-                            <span className="font-semibold text-orange-600">
-                              {formatCurrency(statistics.ipdOnline)}
-                            </span>
-                          </div>
-                          {statistics.overallIpdRefunds > 0 && (
-                            <div className="flex justify-between items-center">
-                              <span className="text-gray-600 text-sm">💰 Refund</span>
-                              <span className="font-semibold text-blue-600">
-                                {formatCurrency(statistics.overallIpdRefunds)}
+                        {ipdTotals ? (
+                          <div className="mt-4 pt-4 border-t border-orange-200">
+                            <h4 className="font-semibold text-gray-800 mb-2">Total Collections (All Time)</h4>
+                            <div className="text-sm text-gray-600 space-y-1">
+                              <div className="flex justify-between items-center">
+                                <span>Cash Total:</span>
+                                <span className="font-semibold">{formatCurrency(ipdTotals.cash_total)}</span>
+                              </div>
+                              <div className="flex justify-between items-center">
+                                <span>Online Total:</span>
+                                <span className="font-semibold">{formatCurrency(ipdTotals.online_total)}</span>
+                              </div>
+                              <p className="text-xs text-gray-500 mt-1">
+                                (UPI: {formatCurrency(ipdTotals.online_upi_total)}, Card: {formatCurrency(ipdTotals.online_card_total)}, Netbanking: {formatCurrency(ipdTotals.online_netbanking_total)}, Cheque: {formatCurrency(ipdTotals.online_cheque_total)})
+                              </p>
+                            </div>
+                            <div className="flex justify-between items-center pt-2 border-t border-orange-200 mt-4">
+                              <span className="text-orange-700 font-medium">Net Deposit (Online + Cash):</span>
+                              <span className="font-bold text-orange-700">
+                                {formatCurrency(ipdTotals.cash_total + ipdTotals.online_total)}
                               </span>
                             </div>
-                          )}
-                          <div className="flex justify-between items-center pt-2 border-t border-orange-200">
-                            <span className="text-orange-700 font-medium">Total IPD (Net Deposit)</span>
-                            <span className="font-bold text-orange-700">
-                              {formatCurrency(statistics.totalIpdAmount)}
-                            </span>
                           </div>
-                        </div>
+                        ) : (
+                          <p className="text-gray-500 mt-4">Loading historical IPD totals...</p>
+                        )}
                       </div>
-                      <div className="bg-gradient-to-r from-emerald-50 to-green-50 rounded-lg p-4 shadow-md">
+                      <div className="bg-gradient-to-r from-emerald-50 to-green-50 rounded-lg p-4 shadow-sm">
                         <div className="flex justify-between items-center">
                           <span className="text-emerald-800 font-semibold">💰 Grand Total</span>
                           <span className="font-bold text-xl text-emerald-600">
