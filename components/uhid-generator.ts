@@ -23,7 +23,7 @@ export async function generateNextUHID(): Promise<GenerateUHIDResult> {
   try {
     const today = new Date()
     const datePart = format(today, "ddMMyy") // ddmmtt format (e.g., 060725)
-    const uhidPrefix = `MF-${datePart}`
+    const uhidPrefix = `GMH-${datePart}`
 
     // Call the PostgreSQL RPC function to get the next global counter value
     // This function maintains a continuous sequence across all dates
