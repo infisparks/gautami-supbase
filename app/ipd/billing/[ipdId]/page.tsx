@@ -2056,7 +2056,7 @@ export default function BillingPage() {
                         <option value="">Select</option>
                         <option value="Self">Self</option>
                         <option value="Meraj Sir">Meraj Sir</option>
-                        <option value="Farid Sir">Farid Sir</option>
+                      
                         <option value="Other">Other</option>
                       </select>
                       {errorsDiscount.discountGivenBy && (
