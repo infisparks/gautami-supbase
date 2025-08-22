@@ -10,14 +10,59 @@ import { toast } from "sonner"
 // Import the ParsedServiceItem from shared-types to ensure consistency
 import { ParsedServiceItem } from "@/lib/shared-types"
 
+// Utility function to parse services manually
+const parseServicesManually = (message: string): ParsedServiceItem[] => {
+  const lines = message.split(/\r?\n/).filter((line) => line.trim() !== "");
+  const parsedItems: ParsedServiceItem[] = [];
+
+  lines.forEach((line) => {
+    const regex = /(.+?)\s+(\d+)\s+₹\s*([\d.,]+)/; // Regex to capture service name, quantity, and amount
+    const match = line.match(regex);
+
+    if (match) {
+      const fullServiceName = match[1].trim();
+      const quantity = parseInt(match[2], 10);
+      const amount = parseFloat(match[3].replace(/,/g, "")); // Remove commas for parsing
+
+      let serviceName = fullServiceName;
+      let type: "service" | "doctorvisit" = "service";
+      let doctorName: string | undefined = undefined;
+
+      const doctorRegex = /(Dr\.?\s*[A-Za-z]+\s*[A-Za-z]*|Doctor\s*[A-Za-z]+\s*[A-Za-z]*)/i;
+      const doctorMatch = fullServiceName.match(doctorRegex);
+
+      if (doctorMatch) {
+        type = "doctorvisit";
+        doctorName = doctorMatch[1].trim();
+        // Optionally, remove doctor name from serviceName if desired, or keep as is
+        // For now, keeping fullServiceName as is, as it contains the doctor's name
+      }
+
+      parsedItems.push({
+        id: crypto.randomUUID(),
+        serviceName: serviceName,
+        quantity: quantity,
+        amount: amount,
+        type: type,
+        ...(doctorName && { doctorName: doctorName }),
+      });
+    } else {
+      console.warn("Could not parse line:", line);
+      // Handle unparseable lines, e.g., by adding an error or skipping
+    }
+  });
+
+  return parsedItems;
+};
+
 interface BulkServiceModalProps {
   isOpen: boolean
   onClose: () => void
   onAddServices: (services: ParsedServiceItem[]) => Promise<void>
-  geminiApiKey: string // API key passed as prop
+  // geminiApiKey: string // API key passed as prop
 }
 
-export default function BulkServiceModal({ isOpen, onClose, onAddServices, geminiApiKey }: BulkServiceModalProps) {
+export default function BulkServiceModal({ isOpen, onClose, onAddServices }: BulkServiceModalProps) {
   const [message, setMessage] = useState("")
   const [parsedServices, setParsedServices] = useState<ParsedServiceItem[]>([])
   const [loading, setLoading] = useState(false)
@@ -40,82 +85,28 @@ export default function BulkServiceModal({ isOpen, onClose, onAddServices, gemin
       return
     }
 
-    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`
-    const prompt = `Extract an array of JSON objects, each with "serviceName" (string), "quantity" (number), and "amount" (number) from this message. If quantity is not specified, assume 1. If amount is not specified, assume 0. Categorize services into two types: "doctorvisit" if the service name explicitly includes "Dr." or "doctor" followed by a name (e.g., "Dr. Sharma's Visit", "Doctor Consultation with Dr. Smith"), and "service" for all other items. If the type is "doctorvisit", extract the doctor's full name into a separate "doctorName" (string) field. Ensure the output is a valid JSON array.
-
-    Example 1: "2x X-ray 1500, Blood Test 500, 3x Dressing 200"
-    Output 1: [{"serviceName": "X-ray", "quantity": 2, "amount": 1500, "type": "service"}, {"serviceName": "Blood Test", "quantity": 1, "amount": 500, "type": "service"}, {"serviceName": "Dressing", "quantity": 3, "amount": 200, "type": "service"}]
-
-    Example 2: "Physiotherapy 1000, ECG"
-    Output 2: [{"serviceName": "Physiotherapy", "quantity": 1, "amount": 1000, "type": "service"}, {"serviceName": "ECG", "quantity": 1, "amount": 0, "type": "service"}]
-
-    Example 3: "CT Scan 2500, 2x Injection 150, Doctor Visit Dr. Sharma 500"
-    Output 3: [{"serviceName": "CT Scan", "quantity": 1, "amount": 2500, "type": "service"}, {"serviceName": "Injection", "quantity": 2, "amount": 150, "type": "service"}, {"serviceName": "Doctor Visit", "quantity": 1, "amount": 500, "type": "doctorvisit", "doctorName": "Dr. Sharma"}]
-
-    Example 4: "Dr. Singh's Consultation 700, Lab Test 300"
-    Output 4: [{"serviceName": "Dr. Singh's Consultation", "quantity": 1, "amount": 700, "type": "doctorvisit", "doctorName": "Dr. Singh"}, {"serviceName": "Lab Test", "quantity": 1, "amount": 300, "type": "service"}]
-
-    Now, extract from this message: "${message}"`
-
     try {
-      const res = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { responseMimeType: "application/json" },
-        }),
-      })
+      const parsed = parseServicesManually(message);
 
-      if (!res.ok) {
-        const errorData = await res.json()
-        throw new Error(`Gemini API error: ${res.status} - ${errorData.error?.message || res.statusText}`)
-      }
-
-      const json = await res.json()
-      const geminiText = json.candidates?.[0]?.content?.parts?.[0]?.text
-
-      if (!geminiText) {
-        throw new Error("Gemini did not return a valid response.")
-      }
-
-      // Parse the JSON string into an array of ParsedServiceItem
-      const parsed: ParsedServiceItem[] = JSON.parse(geminiText)
-
-      if (
-        !Array.isArray(parsed) ||
-        parsed.some(
-          (item) =>
-            typeof item.serviceName !== "string" ||
-            typeof item.quantity !== "number" ||
-            typeof item.amount !== "number" ||
-            item.quantity < 1 ||
-            item.amount < 0 ||
-            (item.type !== "service" && item.type !== "doctorvisit") || // Validate type
-            (item.type === "doctorvisit" && typeof item.doctorName !== "string") // Validate doctorName for doctorvisit
-        )
-      ) {
-        throw new Error("Gemini returned an unexpected data format. Please try rephrasing your message.")
+      if (!Array.isArray(parsed) || parsed.some((item) => typeof item.serviceName !== "string" || typeof item.quantity !== "number" || typeof item.amount !== "number" || item.quantity < 1 || item.amount < 0 || (item.type !== "service" && item.type !== "doctorvisit") || (item.type === "doctorvisit" && typeof item.doctorName !== "string"))) {
+        throw new Error("Parsed data format is unexpected. Please check your message format.");
       }
 
       const servicesWithIds = parsed.map((item) => ({
         ...item,
         id: crypto.randomUUID(),
-        // Ensure type and doctorName are present, even if defaulted by Gemini.
-        // If Gemini misses 'type', we might default it here, but the prompt should ideally handle it.
-        // For now, assuming Gemini's output adheres to the prompt's type and doctorName inclusion.
       }));
 
-      setParsedServices(servicesWithIds)
-      setConsultantServices(servicesWithIds.filter(service => service.type === "doctorvisit"))
-      setOtherServices(servicesWithIds.filter(service => service.type === "service"))
+      setParsedServices(servicesWithIds);
+      setConsultantServices(servicesWithIds.filter((service) => service.type === "doctorvisit"));
+      setOtherServices(servicesWithIds.filter((service) => service.type === "service"));
     } catch (err: any) {
-      console.error("Error parsing message with Gemini:", err)
-      setError(`Failed to parse message: ${err.message || "Unknown error"}. Please check your input and API key.`)
+      console.error("Error parsing message:", err);
+      setError(`Failed to parse message: ${err.message || "Unknown error"}. Please check your input format.`);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   const handleConfirmAddServices = async () => {
     setLoading(true)

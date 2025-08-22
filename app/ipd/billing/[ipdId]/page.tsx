@@ -2143,12 +2143,10 @@ export default function BillingPage() {
         </Dialog>
       </Transition>
 
-      {/* Bulk Service Modal */}
       <BulkServiceModal
         isOpen={isBulkServiceModalOpen}
         onClose={() => setIsBulkServiceModalOpen(false)}
         onAddServices={handleAddBulkServices}
-        geminiApiKey={process.env.NEXT_PUBLIC_GEMINI_API_KEY || "AIzaSyA0G8Jhg6yJu-D_OI97_NXgcJTlOes56P8"}
       />
     </div>
   )
