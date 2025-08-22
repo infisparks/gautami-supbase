@@ -21,16 +21,16 @@ import {
   Edit,
 } from "lucide-react";
 import { ToastContainer, toast } from "react-toastify";
-import { format, parseISO } from "date-fns"; // Only date-fns needed
+import { format, parseISO } from "date-fns";
 import { motion, AnimatePresence } from "framer-motion";
 import "react-toastify/dist/ReactToastify.css";
 
 // Interface for discharge summary data stored in Supabase
 interface DischargeSummarySupabase {
-  id?: string; // UUID for the summary record itself
+  id?: string;
   ipd_id: number;
-  patient_id: string; // Foreign key
-  uhid: string; // Foreign key
+  patient_id: string;
+  uhid: string;
   final_diagnosis: string | null;
   procedures: string | null;
   provisional_diagnosis: string | null;
@@ -65,23 +65,24 @@ interface DischargeDataForm {
 
 // Patient record interface, now fetched from ipd_registration + patient_detail + bed_management
 interface PatientRecord {
-  patientId: string; // From patient_detail
-  uhid: string; // From patient_detail
-  ipdId: string; // From ipd_registration
-  name: string; // From patient_detail
-  mobileNumber: string; // From patient_detail
-  address?: string; // From patient_detail
-  age?: number | null; // From patient_detail
-  gender?: string | null; // From patient_detail
-  relativeName?: string | null; // From ipd_registration
-  relativePhone?: number | null; // From ipd_registration
-  relativeAddress?: string | null; // From ipd_registration
-  roomType?: string | null; // From bed_management via ipd_registration.bed_id
-  bedNumber?: number | null; // From bed_management via ipd_registration.bed_id
-  bedId?: number | null; // The actual bed_id to update bed status
-  admitDate?: string | null; // From ipd_registration.admission_date or created_at
-  dischargeDate?: string | null; // From ipd_registration.discharge_date
-  currentDischargeType?: string | null; // To store if patient was already discharged with a type
+  patientId: string;
+  uhid: string;
+  ipdId: string;
+  name: string;
+  mobileNumber: string;
+  address?: string;
+  age?: number | null;
+  gender?: string | null;
+  relativeName?: string | null;
+  relativePhone?: number | null;
+  relativeAddress?: string | null;
+  roomType?: string | null;
+  bedNumber?: number | null;
+  bedId?: number | null;
+  admitDate?: string | null;
+  dischargeDate?: string | null;
+  currentDischargeType?: string | null;
+  billno?: string | null; // Added bill number field
 }
 
 // Define discharge types
@@ -155,6 +156,7 @@ export default function DischargeSummaryPage() {
           relative_ph_no,
           relative_address,
           bed_id,
+          billno,
           patient_detail (
             patient_id,
             name,
@@ -233,6 +235,7 @@ export default function DischargeSummaryPage() {
         admitDate: ipdData.admission_date || ipdData.created_at,
         dischargeDate: ipdData.discharge_date,
         currentDischargeType: summaryData?.discharge_type || null,
+        billno: ipdData.billno,
       };
       setPatientRecord(patient);
 
@@ -313,8 +316,6 @@ export default function DischargeSummaryPage() {
     }
     setSaving(true);
     try {
-      // Get current date and time in local system's timezone (which is IST for India)
-      // Convert to ISO string with 'Z' for UTC for Supabase storage
       const nowUtc = new Date().toISOString();
 
       const payload: DischargeSummarySupabase = {
@@ -333,7 +334,7 @@ export default function DischargeSummaryPage() {
         discharge_medication: dischargeData.dischargeMedication || null,
         follow_up: dischargeData.followUp || null,
         discharge_instructions: dischargeData.dischargeInstructions || null,
-        last_updated: nowUtc, // Store as UTC in Supabase
+        last_updated: nowUtc,
         discharge_type: patientRecord.currentDischargeType || null,
       };
 
@@ -360,7 +361,7 @@ export default function DischargeSummaryPage() {
         if (insertError) throw insertError;
       }
 
-      setLastSaved(nowUtc); // Update local state with UTC string
+      setLastSaved(nowUtc);
       toast.success("Discharge note saved!");
     } catch (err: any) {
       console.error("Save failed:", err);
@@ -368,6 +369,30 @@ export default function DischargeSummaryPage() {
     } finally {
       setSaving(false);
     }
+  };
+
+  /* ─── Bill Number Generation Function ─────────────────────────────────── */
+  const generateBillNumber = async (): Promise<string> => {
+    const today = new Date();
+    const month = (today.getMonth() + 1).toString().padStart(2, '0');
+    const year = today.getFullYear().toString().slice(-2);
+    const monthYear = `${month}/${year}`;
+
+    const { data: counterData, error: counterError } = await supabase.rpc('increment_bill_counter', { month_year_param: monthYear });
+
+    if (counterError) {
+        console.error("Supabase RPC error:", counterError);
+        throw new Error("Failed to get or increment bill counter.");
+    }
+    
+    if (!counterData) {
+      throw new Error("No counter data returned from RPC.");
+    }
+
+    const counter = counterData as number;
+
+    const paddedCounter = counter.toString().padStart(4, '0');
+    return `GMH/${month}/${paddedCounter}`;
   };
 
   /* ─── "Complete Discharge" → update discharge_date in ipd_registration, free bed, and save summary ─ */
@@ -388,26 +413,36 @@ export default function DischargeSummaryPage() {
     setLoading(true);
     setShowDischargeModal(false);
     try {
-      // Get current date and time in local system's timezone (which is IST for India)
-      // Convert to ISO string with 'Z' for UTC for Supabase storage
       const dischargeTimestampUtc = new Date().toISOString();
+      let generatedBillNumber: string | null = null;
 
-      // 1. Update discharge_date in ipd_registration
       if (dischargeType === DISCHARGE_TYPES.DISCHARGE || dischargeType === DISCHARGE_TYPES.DEATH) {
-        const { error: ipdUpdateError } = await supabase
-          .from("ipd_registration")
-          .update({ discharge_date: dischargeTimestampUtc }) // Set discharge date to UTC time for final discharge/death
-          .eq("ipd_id", parseInt(patientRecord.ipdId));
-        if (ipdUpdateError) throw ipdUpdateError;
-      } else if (dischargeType === DISCHARGE_TYPES.DISCHARGE_PARTIALLY) {
-        const { error: ipdUpdateError } = await supabase
-          .from("ipd_registration")
-          .update({ discharge_date: null }) // Explicitly set to null for partial discharge
-          .eq("ipd_id", parseInt(patientRecord.ipdId));
-        if (ipdUpdateError) throw ipdUpdateError;
+        try {
+          generatedBillNumber = await generateBillNumber();
+        } catch (billError: any) {
+          console.error("Error generating bill number:", billError);
+          toast.error("Failed to generate bill number. Discharge aborted.");
+          setLoading(false);
+          return;
+        }
       }
 
-      // 2. Save the discharge summary text and discharge type
+      const ipdUpdatePayload: { discharge_date: string | null; billno?: string | null } = {
+        discharge_date: (dischargeType === DISCHARGE_TYPES.DISCHARGE || dischargeType === DISCHARGE_TYPES.DEATH)
+          ? dischargeTimestampUtc
+          : null,
+      };
+
+      if (generatedBillNumber) {
+        ipdUpdatePayload.billno = generatedBillNumber;
+      }
+
+      const { error: ipdUpdateError } = await supabase
+        .from("ipd_registration")
+        .update(ipdUpdatePayload)
+        .eq("ipd_id", parseInt(patientRecord.ipdId));
+      if (ipdUpdateError) throw ipdUpdateError;
+
       const payload: DischargeSummarySupabase = {
         ipd_id: parseInt(patientRecord.ipdId),
         patient_id: patientRecord.patientId,
@@ -424,7 +459,7 @@ export default function DischargeSummaryPage() {
         discharge_medication: dischargeData.dischargeMedication || null,
         follow_up: dischargeData.followUp || null,
         discharge_instructions: dischargeData.dischargeInstructions || null,
-        last_updated: dischargeTimestampUtc, // Store as UTC in Supabase
+        last_updated: dischargeTimestampUtc,
         discharge_type: dischargeType,
       };
 
@@ -451,7 +486,6 @@ export default function DischargeSummaryPage() {
         if (insertError) throw insertError;
       }
 
-      // 3. Update bed status in bed_management
       if (patientRecord.bedId) {
         let newBedStatus: "available" | "occupied" | null = null;
         if (dischargeType === DISCHARGE_TYPES.DISCHARGE || dischargeType === DISCHARGE_TYPES.DEATH) {
@@ -475,13 +509,13 @@ export default function DischargeSummaryPage() {
 
       toast.success(`Patient marked as ${dischargeType.toLowerCase()} successfully!`);
 
-      // Update local state to reflect the changes, using the UTC timestamp
       setPatientRecord((prev) => ({
         ...prev!,
         dischargeDate: (dischargeType === DISCHARGE_TYPES.DISCHARGE || dischargeType === DISCHARGE_TYPES.DEATH)
           ? dischargeTimestampUtc
           : null,
         currentDischargeType: dischargeType,
+        billno: generatedBillNumber,
       }));
 
       if (dischargeType === DISCHARGE_TYPES.DISCHARGE) {
@@ -507,10 +541,6 @@ export default function DischargeSummaryPage() {
 
     setSaving(true);
     try {
-      // The `datetime-local` input gives a string in "YYYY-MM-DDTHH:mm" format,
-      // which is typically interpreted as a local time.
-      // We convert this local time string into a Date object, then to an ISO string
-      // for UTC storage in Supabase.
       const parsedDate = new Date(editedDischargeDate);
       if (isNaN(parsedDate.getTime())) {
         toast.error("Invalid date format.");
@@ -518,7 +548,6 @@ export default function DischargeSummaryPage() {
         return;
       }
 
-      // Convert the parsed local date object to an ISO 8601 UTC string for Supabase
       const editedDateUtc = parsedDate.toISOString();
 
       const { error: ipdUpdateError } = await supabase
@@ -528,7 +557,6 @@ export default function DischargeSummaryPage() {
 
       if (ipdUpdateError) throw ipdUpdateError;
 
-      // Also update the last_updated time in discharge_summaries if it exists
       const { data: existingSummary } = await supabase
         .from("discharge_summaries")
         .select("id")
@@ -636,7 +664,6 @@ export default function DischargeSummaryPage() {
               <div className="flex items-center text-sm text-gray-500">
                 <Clock size={14} className="mr-1" />
                 Last saved:{" "}
-                {/* Format the UTC timestamp to local IST for display */}
                 {format(parseISO(lastSaved), "MMM dd,yyyy 'at' HH:mm")}
               </div>
             )}
@@ -645,7 +672,6 @@ export default function DischargeSummaryPage() {
               <button
                 onClick={() => {
                   setShowEditDischargeDateModal(true);
-                  // Ensure the input field is pre-filled with the current discharge date in YYYY-MM-DDTHH:mm format
                   if (patientRecord.dischargeDate) {
                     setEditedDischargeDate(format(parseISO(patientRecord.dischargeDate), "yyyy-MM-dd'T'HH:mm"));
                   }
@@ -712,6 +738,11 @@ export default function DischargeSummaryPage() {
                   </h1>
                   <p className="text-teal-50">
                     UHID: {patientRecord.uhid}
+                    {patientRecord.billno && (
+                      <span className="ml-4 text-white font-semibold">
+                        Bill No: {patientRecord.billno}
+                      </span>
+                    )}
                   </p>
                 </div>
 
