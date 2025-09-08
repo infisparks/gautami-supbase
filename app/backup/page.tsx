@@ -2,8 +2,6 @@
 
 import type React from "react"
 import { useEffect, useState, useMemo, useCallback } from "react"
-// REMOVED: import { db } from "@/lib/firebase"
-// REMOVED: import { ref, get } from "firebase/database"
 import { format, differenceInDays, addDays } from "date-fns"
 import { Bar } from "react-chartjs-2"
 import { Chart as ChartJS, BarElement, CategoryScale, LinearScale, Tooltip, Legend } from "chart.js"
@@ -59,7 +57,7 @@ interface IPayment {
 
 interface OPDAppointment {
   id: string
-  patientId: string // This is the UHID if available, or a unique ID from the path
+  patientId: string
   name: string
   phone: string
   date: string
@@ -94,8 +92,8 @@ interface IPDPayment {
 
 interface IPDAppointment {
   id: string
-  patientId: string // This is the UHID if available, or a unique ID from the path
-  uhid: string // Explicitly UHID for IPD
+  patientId: string
+  uhid: string
   name: string
   phone: string
   admissionDate: string
@@ -105,29 +103,29 @@ interface IPDAppointment {
   roomType: string
   status: string
   services: IPDService[]
-  totalAmount: number // This is total service amount (gross)
-  totalDeposit: number // This is net deposit (advances - refunds)
+  totalAmount: number
+  totalDeposit: number
   totalRefunds: number
-  discount: number // NEW: Discount amount for IPD
+  discount: number
   payments: IPDPayment[]
   createdAt: string
-  remainingAmount?: number // This will be (totalAmount - discount) - totalDeposit
+  remainingAmount?: number
   type: "IPD"
-  details?: any // For full IPD details if needed
-  note?: string // NEW: Add note field
+  details?: any
+  note?: string
 }
 
 interface OTAppointment {
   id: string
-  patientId: string // This is the UHID if available, or a unique ID from the path
-  uhid: string // Explicitly UHID for OT
+  patientId: string
+  uhid: string
   name: string
   phone: string
   date: string
   time: string
   message: string
   createdAt: string
-  ipdId: string // This refers to the unique OT entry ID, not necessarily an IPD ID. Renamed for clarity.
+  ipdId: string
   type: "OT"
 }
 
@@ -145,7 +143,6 @@ interface PatientInfo {
 interface FilterState {
   searchQuery: string
   filterType: "dateRange"
-  selectedMonth: string
   startDate: string
   endDate: string
 }
@@ -165,21 +162,12 @@ const formatBytes = (bytes: number) => {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`
 }
 
-const getThisWeekRange = () => {
-  const now = new Date()
-  return {
-    start: format(addDays(now, -6), "yyyy-MM-dd"),
-    end: format(now, "yyyy-MM-dd"),
-  }
-}
-
 const getTodayDate = () => format(new Date(), "yyyy-MM-dd")
 
-const getMonthRange = (monthYear: string) => {
-  if (!monthYear) return { start: "", end: "" }
-  const [year, month] = monthYear.split("-").map(Number)
-  const start = new Date(year, month - 1, 1)
-  const end = new Date(year, month, 0)
+const getThisMonthRange = () => {
+  const now = new Date()
+  const start = new Date(now.getFullYear(), now.getMonth(), 1)
+  const end = new Date(now.getFullYear(), now.getMonth() + 1, 0)
   return {
     start: format(start, "yyyy-MM-dd"),
     end: format(end, "yyyy-MM-dd"),
@@ -190,41 +178,34 @@ const getMonthRange = (monthYear: string) => {
 
 const DashboardPage: React.FC = () => {
   // State
-  const [opdAppointments, setOpdAppointments] = useState<OPDAppointment[]>([])
-  const [ipdAppointments, setIpdAppointments] = useState<IPDAppointment[]>([])
-  const [otAppointments, setOtAppointments] = useState<OTAppointment[]>([])
+  const [allOpdAppointments, setAllOpdAppointments] = useState<OPDAppointment[]>([])
+  const [allIpdAppointments, setAllIpdAppointments] = useState<IPDAppointment[]>([])
+  const [allOtAppointments, setAllOtAppointments] = useState<OTAppointment[]>([])
   const [doctors, setDoctors] = useState<{ [key: string]: Doctor }>({})
-  const [allPatientsInfo, setAllPatientsInfo] = useState<PatientInfo[]>([]) // To store all patient info for search
+  const [allPatientsInfo, setAllPatientsInfo] = useState<PatientInfo[]>([])
+
+  const defaultRange = useMemo(() => getThisMonthRange(), []);
 
   const [filters, setFilters] = useState<FilterState>({
     searchQuery: "",
-    filterType: "dateRange", // Set default to 'dateRange'
-    selectedMonth: format(new Date(), "yyyy-MM"),
-    startDate: "2024-07-01", // Default to July 1
-    endDate: "2024-07-30", // Default to July 30
+    filterType: "dateRange",
+    startDate: defaultRange.start,
+    endDate: defaultRange.end,
   })
+
   const [isLoading, setIsLoading] = useState<boolean>(true)
   const [selectedAppointment, setSelectedAppointment] = useState<CombinedAppointment | null>(null)
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false)
   const [modalLoading, setModalLoading] = useState<boolean>(false)
-
-  // New states for patient search and appointments modal
   const [searchedPatients, setSearchedPatients] = useState<PatientInfo[]>([])
   const [selectedPatientForAppointments, setSelectedPatientForAppointments] = useState<PatientInfo | null>(null)
   const [patientAppointmentsModalOpen, setPatientAppointmentsModalOpen] = useState<boolean>(false)
   const [patientAppointmentsLoading, setPatientAppointmentsLoading] = useState<boolean>(false)
   const [patientAllAppointments, setPatientAllAppointments] = useState<CombinedAppointment[]>([])
-
-  // Data download size tracking (these will now be illustrative as we're not truly "downloading" from a live DB)
   const [totalDownloadedBytes, setTotalDownloadedBytes] = useState(0)
   const [searchDownloadedBytes, setSearchDownloadedBytes] = useState(0)
 
-  // Compute current date range
-  const currentDateRange = useMemo(() => {
-    return { start: filters.startDate, end: filters.endDate }
-  }, [filters])
-
-  // Initial data loading from data.json
+  // Load all data from data.json once on mount
   useEffect(() => {
     const loadData = async () => {
       setIsLoading(true)
@@ -234,24 +215,17 @@ const DashboardPage: React.FC = () => {
           throw new Error(`HTTP error! status: ${response.status}`)
         }
         const data = await response.json()
-        const dataSize = JSON.stringify(data).length // Calculate approximate size
+        const dataSize = JSON.stringify(data).length
+        setTotalDownloadedBytes(dataSize)
 
-        setTotalDownloadedBytes(dataSize) // Set total downloaded bytes once
-
-        // Process Doctors
-        if (data.doctors) {
-          setDoctors(data.doctors)
-        } else {
-          console.warn("Doctors data not found in data.json.")
-        }
+        setDoctors(data.doctors || {})
 
         const tempOpd: OPDAppointment[] = []
         const tempIpd: IPDAppointment[] = []
         const tempOt: OTAppointment[] = []
-        const tempPatientInfo: PatientInfo[] = [] // Collect all patient info
+        const tempPatientInfo: PatientInfo[] = []
 
         if (data.patients) {
-          // Collect all patientinfo for search
           if (data.patients.patientinfo) {
             Object.keys(data.patients.patientinfo).forEach((uhid) => {
               const pInfo = data.patients.patientinfo[uhid]
@@ -267,7 +241,6 @@ const DashboardPage: React.FC = () => {
             setAllPatientsInfo(tempPatientInfo)
           }
 
-          // Process OPD
           if (data.patients.opddetail) {
             for (const dateStr in data.patients.opddetail) {
               const dailyData = data.patients.opddetail[dateStr]
@@ -306,28 +279,23 @@ const DashboardPage: React.FC = () => {
             }
           }
 
-          // Process IPD
           if (data.patients.ipddetail) {
             const ipdInfo = data.patients.ipddetail.userinfoipd || {}
             const ipdBilling = data.patients.ipddetail.userbillinginfoipd || {}
 
             for (const dateStr in ipdInfo) {
               const dailyInfo = ipdInfo[dateStr]
-              const dailyBilling = ipdBilling[dateStr] || {} // Corrected: was patientBillingData[patientId]
-
+              const dailyBilling = ipdBilling[dateStr] || {}
               for (const patientId in dailyInfo) {
                 const patientInfoData = dailyInfo[patientId]
-                const patientBillingData = dailyBilling[patientId] || {} // Corrected: was dailyBilling[patientId]
-
+                const patientBillingData = dailyBilling[patientId] || {}
                 for (const ipdId in patientInfoData) {
                   const rec = patientInfoData[ipdId]
                   const bill = patientBillingData[ipdId] || {}
-
                   const payments: IPDPayment[] = []
                   let netDep = 0
                   let totalRe = 0
                   if (bill.payments) {
-                    // Ensure payments is treated as an array of values if it's an object
                     const rawPayments = Array.isArray(bill.payments) ? bill.payments : Object.values(bill.payments)
                     rawPayments.forEach((p: any) => {
                       payments.push(p)
@@ -338,12 +306,7 @@ const DashboardPage: React.FC = () => {
                       }
                     })
                   }
-
-                  // FIX: Use Object.values() for services if it's an object
-                  const rawServices = Array.isArray(bill.services)
-                    ? bill.services
-                    : Object.values(bill.services || {}) // Default to empty object if services is null/undefined
-
+                  const rawServices = Array.isArray(bill.services) ? bill.services : Object.values(bill.services || {})
                   const services: IPDService[] = rawServices.map((s: any) => ({
                     amount: +s.amount || 0,
                     serviceName: s.serviceName || "",
@@ -354,7 +317,6 @@ const DashboardPage: React.FC = () => {
                   const totalSvc = services.reduce((sum, s) => sum + s.amount, 0)
                   const discountAmount = Number(bill.discount) || 0
                   const remaining = totalSvc - discountAmount - netDep
-
                   tempIpd.push({
                     id: `${patientId}_${ipdId}`,
                     patientId: patientId,
@@ -363,7 +325,7 @@ const DashboardPage: React.FC = () => {
                     phone: rec.phone || "N/A",
                     admissionDate: dateStr,
                     admissionTime: rec.admissionTime || "",
-                    doctor: data.doctors[rec.doctor]?.name || "Unknown", // Use loaded doctors
+                    doctor: data.doctors[rec.doctor]?.name || "Unknown",
                     doctorId: rec.doctor,
                     roomType: rec.roomType || "",
                     status: rec.status || "",
@@ -376,7 +338,7 @@ const DashboardPage: React.FC = () => {
                     remainingAmount: remaining,
                     createdAt: rec.createdAt,
                     type: "IPD",
-                    details: data.patients.ipddetail.userdetailipd?.[dateStr]?.[patientId]?.[ipdId] || null, // Directly assign details if available
+                    details: data.patients.ipddetail.userdetailipd?.[dateStr]?.[patientId]?.[ipdId] || null,
                     note: rec.note || "",
                   })
                 }
@@ -384,7 +346,6 @@ const DashboardPage: React.FC = () => {
             }
           }
 
-          // Process OT
           if (data.patients.ot) {
             for (const dateStr in data.patients.ot) {
               const dailyData = data.patients.ot[dateStr]
@@ -411,10 +372,9 @@ const DashboardPage: React.FC = () => {
         } else {
           console.warn("Patients data not found in data.json.")
         }
-
-        setOpdAppointments(tempOpd)
-        setIpdAppointments(tempIpd)
-        setOtAppointments(tempOt)
+        setAllOpdAppointments(tempOpd)
+        setAllIpdAppointments(tempIpd)
+        setAllOtAppointments(tempOt)
       } catch (err) {
         console.error("Error loading data from data.json:", err)
         toast.error("Failed to load dashboard data from local file.")
@@ -422,81 +382,53 @@ const DashboardPage: React.FC = () => {
         setIsLoading(false)
       }
     }
-
     loadData()
-  }, []) // Empty dependency array means this runs once on mount
+  }, [])
 
-  // Main data filtering logic (now purely client-side after initial load)
-  const filteredAppointments = useMemo(() => {
+  // Main data filtering logic based on state
+  const { filteredAppointments, opdAppointments, ipdAppointments, otAppointments } = useMemo(() => {
+    let filteredOpd = allOpdAppointments;
+    let filteredIpd = allIpdAppointments;
+    let filteredOt = allOtAppointments;
+
     if (filters.searchQuery) {
-      const q = filters.searchQuery.toLowerCase()
-      // Check if the search query is just a number (counter part)
-      const isCounterOnly = /^\d+$/.test(filters.searchQuery)
+      const q = filters.searchQuery.toLowerCase();
+      const isCounterOnly = /^\d+$/.test(filters.searchQuery);
       
-      // Filter the pre-loaded allPatientsInfo
       const matchingPatients = allPatientsInfo.filter((p) => {
         if (isCounterOnly) {
-          // Search by counter number - check if UHID ends with the counter number
-          const counterNumber = filters.searchQuery.padStart(5, '0')
-          return p.name.toLowerCase().includes(q) || 
-                 p.phone.includes(q) || 
-                 p.uhid.toLowerCase().includes(q) ||
-                 p.uhid.toLowerCase().endsWith(`-${counterNumber}`)
+          const counterNumber = filters.searchQuery.padStart(5, '0');
+          return p.name.toLowerCase().includes(q) || p.phone.includes(q) || p.uhid.toLowerCase().includes(q) || p.uhid.toLowerCase().endsWith(`-${counterNumber}`);
         } else {
-          // Regular search
-          return p.name.toLowerCase().includes(q) || 
-                 p.phone.includes(q) || 
-                 p.uhid.toLowerCase().includes(q)
+          return p.name.toLowerCase().includes(q) || p.phone.includes(q) || p.uhid.toLowerCase().includes(q);
         }
-      })
-      setSearchedPatients(matchingPatients.slice(0, 10)) // Limit for display
-      setSearchDownloadedBytes(JSON.stringify(matchingPatients).length) // Illustrative size
-      return [] // Return empty for appointments list when in search mode
+      });
+      setSearchedPatients(matchingPatients.slice(0, 10));
+      setSearchDownloadedBytes(JSON.stringify(matchingPatients).length);
+      return { filteredAppointments: [], opdAppointments: [], ipdAppointments: [], otAppointments: [] };
     }
 
-    setSearchedPatients([]) // Clear search results if search query is empty
+    setSearchedPatients([]);
+    
+    const { startDate, endDate } = filters;
+    const startObj = new Date(startDate);
+    const endObj = new Date(endDate);
 
-    const { start, end } = currentDateRange
-    const startDateObj = new Date(start)
-    const endDateObj = new Date(end)
+    filteredOpd = allOpdAppointments.filter(app => new Date(app.date) >= startObj && new Date(app.date) <= endObj);
+    filteredIpd = allIpdAppointments.filter(app => new Date(app.admissionDate) >= startObj && new Date(app.admissionDate) <= endObj);
+    
+    // Combine and sort for the main table
+    const combinedList = [...filteredOpd, ...filteredIpd].sort((a, b) => {
+        const dateA = new Date(a.type === "IPD" ? (a as IPDAppointment).admissionDate : (a as OPDAppointment).date);
+        const dateB = new Date(b.type === "IPD" ? (b as IPDAppointment).admissionDate : (b as OPDAppointment).date);
+        return dateB.getTime() - dateA.getTime();
+    });
 
-    const list: CombinedAppointment[] = []
-
-    // Filter OPD appointments by date
-    opdAppointments.forEach((app) => {
-      const appDate = new Date(app.date)
-      if (appDate >= startDateObj && appDate <= endDateObj) {
-        list.push(app)
-      }
-    })
-
-    // Filter IPD appointments by date
-    ipdAppointments.forEach((app) => {
-      const appDate = new Date(app.admissionDate)
-      if (appDate >= startDateObj && appDate <= endDateObj) {
-        list.push(app)
-      }
-    })
-
-    // OT appointments are not displayed in the main table, only in patient's full history,
-    // so no need to include them here. If they were, they'd be filtered similarly.
-
-    // Sorting by date (most recent first)
-    list.sort((a, b) => {
-      const dateA = new Date(a.type === "IPD" ? (a as IPDAppointment).admissionDate : (a as OPDAppointment).date)
-      const dateB = new Date(b.type === "IPD" ? (b as IPDAppointment).admissionDate : (b as OPDAppointment).date)
-      return dateB.getTime() - dateA.getTime()
-    })
-
-    return list
-  }, [filters.searchQuery, currentDateRange, opdAppointments, ipdAppointments, allPatientsInfo])
+    return { filteredAppointments: combinedList, opdAppointments: filteredOpd, ipdAppointments: filteredIpd, otAppointments: allOtAppointments };
+  }, [filters, allOpdAppointments, allIpdAppointments, allOtAppointments, allPatientsInfo]);
 
   // Statistics
   const statistics = useMemo(() => {
-    // These now operate on the *unfiltered* opdAppointments and ipdAppointments
-    // so they reflect the total data loaded, not just the currently displayed range.
-    // If you want statistics for the *filtered* range, adjust this to use filteredAppointments
-    // and sum based on type. For a dashboard, total loaded stats might be more appropriate.
     const totalOpdAmt = opdAppointments.reduce((sum, a) => sum + (a.payment.totalPaid || 0), 0)
     const totalIpdDep = ipdAppointments.reduce((sum, a) => sum + a.totalDeposit, 0)
     const totalIpdRef = ipdAppointments.reduce((sum, a) => sum + a.totalRefunds, 0)
@@ -510,7 +442,6 @@ const DashboardPage: React.FC = () => {
           .reduce((s, p) => s + Number(p.amount), 0),
       0,
     )
-
     const ipdOnline = ipdAppointments.reduce(
       (sum, a) =>
         sum +
@@ -519,7 +450,6 @@ const DashboardPage: React.FC = () => {
           .reduce((s, p) => s + Number(p.amount), 0),
       0,
     )
-
     return {
       totalOpdCount: opdAppointments.length,
       totalOpdAmount: totalOpdAmt,
@@ -545,23 +475,19 @@ const DashboardPage: React.FC = () => {
           .forEach((m) => map.set(m.doctor!, (map.get(m.doctor!) || 0) + 1))
       }
     })
-    return Array.from(map.entries())
-      .map(([doctorName, count]) => ({ doctorName, count }))
-      .sort((a, b) => b.count - a.count)
+    return Array.from(map.entries()).map(([doctorName, count]) => ({ doctorName, count })).sort((a, b) => b.count - a.count)
   }, [opdAppointments])
 
   const doctorConsultChartData = useMemo(() => {
     const top = doctorConsultations.slice(0, 10)
     return {
       labels: top.map((d) => d.doctorName),
-      datasets: [
-        {
-          label: "Consultations",
-          data: top.map((d) => d.count),
-          backgroundColor: "rgba(75,192,192,0.6)",
-          borderWidth: 1,
-        },
-      ],
+      datasets: [{
+        label: "Consultations",
+        data: top.map((d) => d.count),
+        backgroundColor: "rgba(75,192,192,0.6)",
+        borderWidth: 1,
+      }],
     }
   }, [doctorConsultations])
 
@@ -570,69 +496,46 @@ const DashboardPage: React.FC = () => {
     const today = getTodayDate()
     const yesterday = format(addDays(new Date(), -1), "yyyy-MM-dd")
     const dayBeforeYesterday = format(addDays(new Date(), -2), "yyyy-MM-dd")
-
     const opdCounts: Record<string, number> = { [dayBeforeYesterday]: 0, [yesterday]: 0, [today]: 0 }
-    opdAppointments.forEach((a) => {
-      if (opdCounts[a.date] !== undefined) opdCounts[a.date]++
-    })
-
+    allOpdAppointments.forEach((a) => { if (opdCounts[a.date] !== undefined) opdCounts[a.date]++ })
     const ipdCounts: Record<string, number> = { [dayBeforeYesterday]: 0, [yesterday]: 0, [today]: 0 }
-    ipdAppointments.forEach((a) => {
-      if (ipdCounts[a.admissionDate] !== undefined) ipdCounts[a.admissionDate]++
-    })
-
+    allIpdAppointments.forEach((a) => { if (ipdCounts[a.admissionDate] !== undefined) ipdCounts[a.admissionDate]++ })
     return {
       labels: [dayBeforeYesterday, yesterday, today],
       datasets: [
-        {
-          label: "OPD Appointments",
-          data: [opdCounts[dayBeforeYesterday], opdCounts[yesterday], opdCounts[today]],
-          backgroundColor: "rgba(54,162,235,0.6)",
-        },
-        {
-          label: "IPD Admissions",
-          data: [ipdCounts[dayBeforeYesterday], ipdCounts[yesterday], ipdCounts[today]],
-          backgroundColor: "rgba(255,99,132,0.6)",
-        },
+        { label: "OPD Appointments", data: [opdCounts[dayBeforeYesterday], opdCounts[yesterday], opdCounts[today]], backgroundColor: "rgba(54,162,235,0.6)" },
+        { label: "IPD Admissions", data: [ipdCounts[dayBeforeYesterday], ipdCounts[yesterday], ipdCounts[today]], backgroundColor: "rgba(255,99,132,0.6)" },
       ],
     }
-  }, [opdAppointments, ipdAppointments])
+  }, [allOpdAppointments, allIpdAppointments])
 
-  // Handlers
   const handleDateRangeChange = (start: string, end: string) => {
     if (start && end) {
       const diff = differenceInDays(new Date(end), new Date(start))
       if (diff > 30) {
         toast.error("Date range cannot exceed 30 days")
         const maxEnd = format(addDays(new Date(start), 30), "yyyy-MM-dd")
-        setFilters((p) => ({ ...p, startDate: start, endDate: maxEnd, filterType: "dateRange" }))
+        setFilters((p) => ({ ...p, startDate: start, endDate: maxEnd }))
       } else {
-        setFilters((p) => ({ ...p, startDate: start, endDate: end, filterType: "dateRange" }))
+        setFilters((p) => ({ ...p, startDate: start, endDate: end }))
       }
     } else {
       setFilters((p) => ({ ...p, startDate: start, endDate: end }))
     }
   }
 
-  const handleFilterChange = (upd: Partial<FilterState>) => {
-    setFilters((p) => ({ ...p, ...upd }))
-  }
-
-  const resetFilters = () =>
+  const resetFilters = () => {
     setFilters({
       searchQuery: "",
       filterType: "dateRange",
-      selectedMonth: format(new Date(), "yyyy-MM"),
-      startDate: "2024-07-01", // Reset to July 1
-      endDate: "2024-07-30", // Reset to July 30
+      startDate: defaultRange.start,
+      endDate: defaultRange.end,
     })
+  }
 
-  // Modal for individual appointment details
   const openModal = async (app: CombinedAppointment) => {
     setModalLoading(true)
     setIsModalOpen(true)
-    // For IPD, the `details` field is already loaded in the initial `loadData`
-    // so we just set the selectedAppointment directly.
     setSelectedAppointment(app)
     setModalLoading(false)
   }
@@ -642,65 +545,47 @@ const DashboardPage: React.FC = () => {
     setSelectedAppointment(null)
   }
 
-  // New: Fetch all appointments for a specific patient (for patient search modal)
   const fetchAllAppointmentsForPatient = useCallback(
     async (patientId: string) => {
       setPatientAppointmentsLoading(true)
       const allPatientApps: CombinedAppointment[] = []
-
-      // Filter from the already loaded data based on patientId
-      opdAppointments.forEach((app) => {
-        if (app.patientId === patientId) {
-          allPatientApps.push(app)
-        }
+      allOpdAppointments.forEach((app) => {
+        if (app.patientId === patientId) allPatientApps.push(app)
       })
-
-      ipdAppointments.forEach((app) => {
-        if (app.patientId === patientId) {
-          allPatientApps.push(app)
-        }
+      allIpdAppointments.forEach((app) => {
+        if (app.patientId === patientId) allPatientApps.push(app)
       })
-
-      otAppointments.forEach((app) => {
-        if (app.patientId === patientId) {
-          allPatientApps.push(app)
-        }
+      allOtAppointments.forEach((app) => {
+        if (app.patientId === patientId) allPatientApps.push(app)
       })
-
       setPatientAllAppointments(
         allPatientApps.sort((a, b) => {
           const dateA = new Date(a.type === "IPD" ? (a as IPDAppointment).admissionDate : a.date)
           const dateB = new Date(b.type === "IPD" ? (b as IPDAppointment).admissionDate : b.date)
-          // Fallback to createdAt if date is same or invalid, or time
           const timeA = a.type === "IPD" ? (a as IPDAppointment).admissionTime : a.time
           const timeB = b.type === "IPD" ? (b as IPDAppointment).admissionTime : b.time
           const createdA = new Date(a.createdAt).getTime()
           const createdB = new Date(b.createdAt).getTime()
-
           if (dateA.getTime() === dateB.getTime()) {
             if (timeA && timeB) {
-              // Simple string comparison for time if format is consistent (HH:MM)
               return timeB.localeCompare(timeA)
             }
-            return createdB - createdA // Fallback to creation time
+            return createdB - createdA
           }
-          return dateB.getTime() - dateA.getTime() // Sort by most recent date first
+          return dateB.getTime() - dateA.getTime()
         }),
       )
       setPatientAppointmentsLoading(false)
     },
-    [opdAppointments, ipdAppointments, otAppointments], // Dependencies are the loaded data
+    [allOpdAppointments, allIpdAppointments, allOtAppointments],
   )
 
-  // New: Open modal for patient's appointments
   const openPatientAppointmentsModal = async (patient: PatientInfo) => {
     setSelectedPatientForAppointments(patient)
     setPatientAppointmentsModalOpen(true)
-    // Data is now fetched from already loaded state
     await fetchAllAppointmentsForPatient(patient.uhid)
   }
 
-  // New: Close modal for patient's appointments
   const closePatientAppointmentsModal = () => {
     setPatientAppointmentsModalOpen(false)
     setSelectedPatientForAppointments(null)
@@ -709,29 +594,20 @@ const DashboardPage: React.FC = () => {
 
   const getBadgeColor = (t: string) => {
     switch (t) {
-      case "OPD":
-        return "bg-sky-100 text-sky-800"
-      case "IPD":
-        return "bg-orange-100 text-orange-800"
-      case "OT":
-        return "bg-purple-100 text-purple-800"
-      default:
-        return "bg-gray-100 text-gray-800"
+      case "OPD": return "bg-sky-100 text-sky-800"
+      case "IPD": return "bg-orange-100 text-orange-800"
+      case "OT": return "bg-purple-100 text-purple-800"
+      default: return "bg-gray-100 text-gray-800"
     }
   }
 
   const getFilterTitle = () => {
     if (!filters.startDate || !filters.endDate) return "Select date range"
-    return `${format(new Date(filters.startDate), "MMM dd")} - ${format(
-      new Date(filters.endDate),
-      "MMM dd, yyyy",
-    )}`
+    return `${format(new Date(filters.startDate), "MMM dd")} - ${format(new Date(filters.endDate), "MMM dd, yyyy")}`
   }
 
   const getModalitiesSummary = (mods?: IModality[]) => {
-    if (!mods || !Array.isArray(mods)) {
-      return "No services"
-    }
+    if (!mods || !Array.isArray(mods)) return "No services"
     const counts = {
       consultation: mods.filter((m) => m.type === "consultation").length,
       casualty: mods.filter((m) => m.type === "casualty").length,
@@ -739,7 +615,7 @@ const DashboardPage: React.FC = () => {
       custom: mods.filter((m) => m.type === "custom").length,
       pathology: mods.filter((m) => m.type === "pathology").length,
       radiology: mods.filter((m) => m.type === "radiology").length,
-      ipd: mods.filter((m) => m.type === "ipd").length, // This seems unusual for OPD modalities
+      ipd: mods.filter((m) => m.type === "ipd").length,
     }
     const parts: string[] = []
     if (counts.consultation) parts.push(`${counts.consultation} Consultation${counts.consultation > 1 ? "s" : ""}`)
@@ -757,7 +633,6 @@ const DashboardPage: React.FC = () => {
       <ToastContainer />
       <main className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
         <div className="max-w-[1600px] mx-auto">
-          {/* Header & Search */}
           <div className="bg-white border-b border-gray-200 sticky top-0 z-10 shadow-sm">
             <div className="px-6 py-4 flex flex-col md:flex-row justify-between items-center">
               <div className="flex items-center mb-4 md:mb-0">
@@ -765,7 +640,7 @@ const DashboardPage: React.FC = () => {
                   <Activity className="text-white h-6 w-6" />
                 </div>
                 <h1 className="text-2xl font-bold bg-gradient-to-r from-sky-600 to-blue-600 bg-clip-text text-transparent">
-                G - Medford NX HOSPITAL
+                  G - Medford NX HOSPITAL
                 </h1>
               </div>
               <div className="relative w-full md:w-1/3">
@@ -787,7 +662,6 @@ const DashboardPage: React.FC = () => {
           </div>
 
           <div className="p-6">
-            {/* Advanced Filters (Hidden when searching) */}
             {!filters.searchQuery && (
               <div className="bg-white rounded-xl shadow-sm mb-6 p-6 border border-gray-100">
                 <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-4">
@@ -798,11 +672,10 @@ const DashboardPage: React.FC = () => {
                     onClick={resetFilters}
                     className="px-4 py-2 rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 flex items-center"
                   >
-                    <RefreshCw className="mr-2 h-4 w-4" /> Reset to July
+                    <RefreshCw className="mr-2 h-4 w-4" /> Reset to Current Month
                   </button>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Date Range Filter */}
                   <div>
                     <label htmlFor="startDate" className="block text-sm font-medium text-gray-700 mb-1">
                       Start Date
@@ -844,11 +717,9 @@ const DashboardPage: React.FC = () => {
               </div>
             )}
 
-            {/* Dashboard Statistics (Hidden when searching) */}
             {!filters.searchQuery && (
               <>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
-                  {/* OPD */}
                   <div className="bg-white shadow-sm rounded-xl p-6 border border-gray-100 hover:shadow-md transition-shadow">
                     <div className="flex items-center justify-between mb-4">
                       <div className="p-3 bg-gradient-to-r from-sky-100 to-blue-100 rounded-full">
@@ -867,7 +738,6 @@ const DashboardPage: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* IPD */}
                   <div className="bg-white shadow-sm rounded-xl p-6 border border-gray-100 hover:shadow-md transition-shadow">
                     <div className="flex items-center justify-between mb-4">
                       <div className="p-3 bg-gradient-to-r from-orange-100 to-red-100 rounded-full">
@@ -894,7 +764,6 @@ const DashboardPage: React.FC = () => {
                     )}
                   </div>
 
-                  {/* OT */}
                   <div className="bg-white shadow-sm rounded-xl p-6 border border-gray-100 hover:shadow-md transition-shadow">
                     <div className="flex items-center justify-between mb-4">
                       <div className="p-3 bg-gradient-to-r from-purple-100 to-pink-100 rounded-full">
@@ -911,7 +780,6 @@ const DashboardPage: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Total Revenue */}
                   <div className="bg-white shadow-sm rounded-xl p-6 border border-gray-100 hover:shadow-md transition-shadow">
                     <div className="flex items-center justify-between mb-4">
                       <div className="p-3 bg-gradient-to-r from-emerald-100 to-green-100 rounded-full">
@@ -931,9 +799,7 @@ const DashboardPage: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Payment Breakdown & Charts */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-                  {/* Payment Breakdown */}
                   <div className="bg-white shadow-sm rounded-xl p-6 border border-gray-100">
                     <h2 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
                       <CreditCard className="mr-2 h-5 w-5 text-gray-600" /> Payment Breakdown
@@ -990,7 +856,6 @@ const DashboardPage: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Appointments Overview Chart */}
                   <div className="bg-white shadow-sm rounded-xl p-6 border border-gray-100">
                     <h2 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
                       <Activity className="mr-2 h-5 w-5 text-gray-600" /> Appointments Overview
@@ -1008,9 +873,7 @@ const DashboardPage: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Doctor Consultations List & Chart */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-                  {/* List */}
                   <div className="bg-white shadow-sm rounded-xl p-6 border border-gray-100">
                     <h2 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
                       <UserCheck className="mr-2 h-5 w-5 text-gray-600" /> Doctor Consultations
@@ -1047,7 +910,6 @@ const DashboardPage: React.FC = () => {
                     )}
                   </div>
 
-                  {/* Chart */}
                   <div className="bg-white shadow-sm rounded-xl p-6 border border-gray-100">
                     <h2 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
                       <UserCheck className="mr-2 h-5 w-5 text-gray-600" /> Top Doctors by Consultations
@@ -1071,7 +933,6 @@ const DashboardPage: React.FC = () => {
               </>
             )}
 
-            {/* Appointments/Patients Table */}
             <div className="bg-white shadow-sm rounded-xl overflow-hidden border border-gray-100">
               <div className="px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-gray-100">
                 <h2 className="text-lg font-semibold text-gray-800 flex items-center">
@@ -1187,7 +1048,6 @@ const DashboardPage: React.FC = () => {
                                 </div>
                                 <div>
                                   <div className="text-sm font-medium text-gray-900">{app.name}</div>
-                                  {/* Only display UHID for IPD as OT is now excluded from this list */}
                                   {app.type === "IPD" && (
                                     <div className="text-xs text-gray-500">UHID: {app.uhid}</div>
                                   )}
@@ -1279,7 +1139,6 @@ const DashboardPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Appointment Details Modal */}
         <Dialog open={isModalOpen} onClose={closeModal} className="fixed z-50 inset-0 overflow-y-auto">
           {isModalOpen && selectedAppointment && (
             <div className="flex items-center justify-center min-h-screen px-4">
@@ -1314,7 +1173,6 @@ const DashboardPage: React.FC = () => {
                       </div>
                       {selectedAppointment.type} Appointment Details
                     </Dialog.Title>
-                    {/* Patient Info */}
                     <div className="bg-gradient-to-r from-gray-50 to-gray-100 rounded-lg p-6 mb-6">
                       <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
                         <User className="mr-2 h-5 w-5 text-gray-600" /> Patient Information
@@ -1370,7 +1228,6 @@ const DashboardPage: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* OPD Details */}
                     {selectedAppointment.type === "OPD" && (
                       <div className="space-y-6">
                         <div className="bg-gradient-to-r from-sky-50 to-blue-50 rounded-lg p-6">
@@ -1472,7 +1329,6 @@ const DashboardPage: React.FC = () => {
                             </div>
                           </div>
                         )}
-                        ){"}"}
                         <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg p-6">
                           <h3 className="text-lg font-semibold text-green-800 mb-4 flex items-center">
                             <CreditCard className="mr-2 h-5 w-5" /> Payment Details
@@ -1517,7 +1373,6 @@ const DashboardPage: React.FC = () => {
                       </div>
                     )}
 
-                    {/* IPD Details */}
                     {selectedAppointment.type === "IPD" && (
                       <div className="space-y-6">
                         {(selectedAppointment as IPDAppointment).services.length > 0 && (
@@ -1667,7 +1522,6 @@ const DashboardPage: React.FC = () => {
                           </div>
                         </div>
 
-                        {/* Patient Notes */}
                         {(selectedAppointment as IPDAppointment).note && (
                           <div className="bg-gradient-to-r from-yellow-50 to-orange-50 rounded-lg p-6">
                             <h3 className="text-lg font-semibold text-orange-800 mb-4 flex items-center">
@@ -1681,7 +1535,6 @@ const DashboardPage: React.FC = () => {
                       </div>
                     )}
 
-                    {/* OT Details */}
                     {selectedAppointment.type === "OT" && (
                       <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg p-6">
                         <h3 className="text-lg font-semibold text-purple-800 mb-4">OT Details</h3>
@@ -1704,7 +1557,6 @@ const DashboardPage: React.FC = () => {
           )}
         </Dialog>
 
-        {/* New: Patient Appointments Details Modal */}
         <Dialog
           open={patientAppointmentsModalOpen}
           onClose={closePatientAppointmentsModal}
@@ -1771,7 +1623,7 @@ const DashboardPage: React.FC = () => {
                               </p>
                             )}
                             <button
-                              onClick={() => openModal(app)} // Re-use existing openModal for full details
+                              onClick={() => openModal(app)}
                               className="mt-3 bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded-lg text-xs font-medium transition-colors"
                             >
                               View Full Details
