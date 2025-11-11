@@ -530,19 +530,25 @@ const IPDAppointmentPage = () => {
       console.warn("Skipping WhatsApp notification: Phone number is missing or invalid.");
       return;
     }
-    const token = "99583991572"; // Your provided token
-
+   
     try {
-      const response = await fetch("https://a.infispark.in/send-text", {
+      // [START] UPDATED WHATSAPP API CALL
+      const apiUrl = "https://evo.infispark.in/message/sendText/medzeal";
+
+      // New payload structure
+      const payload = {
+        number: `91${phoneNumber}`, // Prepend 91 for Indian numbers
+        text: message,
+      };
+
+      const response = await fetch(apiUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          // New apikey header - make sure NEXT_PUBLIC_WHATSAPP_API_KEY is in your .env.local
+          "apikey": process.env.NEXT_PUBLIC_WHATSAPP_API_KEY || ""
         },
-        body: JSON.stringify({
-          token: token,
-          number: `91${phoneNumber}`, // Prepend 91 for Indian numbers as per your API
-          message: message,
-        }),
+        body: JSON.stringify(payload),
       });
 
       const data = await response.json();
@@ -553,6 +559,7 @@ const IPDAppointmentPage = () => {
         toast.error(`Failed to send WhatsApp message to ${phoneNumber}: ${data.message || 'Unknown error'}`);
         console.error(`Failed to send WhatsApp message to ${phoneNumber}:`, data);
       }
+      // [END] UPDATED WHATSAPP API CALL
     } catch (error) {
       toast.error(`Error sending WhatsApp message to ${phoneNumber}.`);
       console.error(`Error sending WhatsApp message to ${phoneNumber}:`, error);

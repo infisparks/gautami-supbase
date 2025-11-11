@@ -628,34 +628,54 @@ export default function BillingPage() {
   const aggregatedConsultantChargesArray = Object.values(aggregatedConsultantCharges)
 
   // Payment notification
-  const sendPaymentNotification = async (
-    patientMobile: string,
-    patientName: string,
-    paymentAmount: number,
-    updatedDeposit: number,
-    amountType: "advance" | "refund" | "deposit" | "settlement", // Corrected type for notification
-  ) => {
-    const apiUrl = "https://a.infispark.in/send-text"
-    let message = ""
-    if (amountType === "advance" || amountType === "deposit" || amountType === "settlement") {
-      message = `Dear ${patientName}, your payment of Rs ${paymentAmount.toLocaleString()} has been successfully added to your account. Your updated total deposit is Rs ${updatedDeposit.toLocaleString()}. Thank you for choosing our service.`
-    } else if (amountType === "refund") {
-      message = `Dear ${patientName}, a refund of Rs ${paymentAmount.toLocaleString()} has been processed to your account. Your updated total deposit is Rs ${updatedDeposit.toLocaleString()}.`
-    }
-    const payload = { token: "99583991572", number: `91${patientMobile}`, message }
-    try {
-      const response = await fetch(apiUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      })
-      if (!response.ok) console.error("Notification API error:", response.statusText)
-    } catch (error) {
-      console.error("Error sending notification:", error)
-    }
-    console.log(`[MOCK] Sending WhatsApp notification for ${patientName}: Amount ${paymentAmount}, Type ${amountType}`)
+// Payment notification
+const sendPaymentNotification = async (
+  patientMobile: string,
+  patientName: string,
+  paymentAmount: number,
+  updatedDeposit: number,
+  amountType: "advance" | "refund" | "deposit" | "settlement", // Corrected type for notification
+) => {
+  const apiUrl = "https://evo.infispark.in/message/sendText/medzeal"; // New URL
+  let message = "";
+  
+  if (amountType === "advance" || amountType === "deposit" || amountType === "settlement") {
+    message = `Dear ${patientName}, your payment of Rs ${paymentAmount.toLocaleString()} has been successfully added to your account. Your updated total deposit is Rs ${updatedDeposit.toLocaleString()}. Thank you for choosing our service.`;
+  } else if (amountType === "refund") {
+    message = `Dear ${patientName}, a refund of Rs ${paymentAmount.toLocaleString()} has been processed to your account. Your updated total deposit is Rs ${updatedDeposit.toLocaleString()}.`;
   }
 
+  // New payload structure
+  const payload = { 
+    number: `91${patientMobile}`, 
+    text: message 
+  };
+
+  try {
+    const response = await fetch(apiUrl, {
+      method: "POST",
+      headers: { 
+        "Content-Type": "application/json",
+        // New apikey header - make sure NEXT_PUBLIC_WHATSAPP_API_KEY is in your .env.local
+        "apikey": process.env.NEXT_PUBLIC_WHATSAPP_API_KEY || ""
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+       const errorData = await response.json().catch(() => ({}));
+       console.error("Notification API error:", response.statusText, errorData);
+       toast.error(`Failed to send WhatsApp notification: ${errorData.message || response.statusText}`);
+    } else {
+       const successData = await response.json();
+       console.log("Payment notification sent successfully:", successData);
+       // Success toast is already handled by the calling function (onSubmitPayment)
+    }
+  } catch (error) {
+    console.error("Error sending notification:", error);
+    toast.error("Error sending payment notification.");
+  }
+}
   // --- Handlers ---
   const onSubmitAdditionalService: SubmitHandler<AdditionalServiceForm> = async (data) => {
     if (!selectedRecord) return

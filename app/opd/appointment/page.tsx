@@ -474,10 +474,9 @@ const AppointmentPage = () => {
     totalCharges: number,
     discount: number
   ) => {
-    const apiUrl = "https://a.infispark.in/send-text"
-    const token = "99583991572" // Your API token
     const formattedPhoneNumber = `91${phoneNumber}` // Assuming Indian numbers and API expects 91 prefix
 
+    // --- Message construction (no changes here) ---
     let message = `*Dear ${patientName},*\n\n`
 
     if (appointmentType === "visithospital") {
@@ -488,9 +487,8 @@ const AppointmentPage = () => {
       if (modalities && modalities.length > 0) {
         message += `*Services Booked:*\n`
         modalities.forEach((modality, index) => {
-          // modality.doctor is already the name here because of `onValueChange` logic
           const doctorName = modality.doctor || "N/A"
-          const serviceName = modality.service || modality.type; // Use custom service name if available, otherwise modality type
+          const serviceName = modality.service || modality.type; // Use custom service name if available
           message += `  ${index + 1}. *${serviceName}* (Dr. ${doctorName}) - ₹${modality.charges}\n`
         })
         message += `\n*Total Charges:* ₹${totalCharges}\n`
@@ -509,32 +507,42 @@ const AppointmentPage = () => {
     }
     message += `\n\n*Thank you for choosing G - Medford NX HOSPITAL.*`
 
+    // --- [START] Updated API Call ---
     try {
+      const apiUrl = "https://evo.infispark.in/message/sendText/medzeal"; // New endpoint
+      
+      // New payload structure
+      const payload = {
+        number: formattedPhoneNumber,
+        text: message
+      };
+
       const response = await fetch(apiUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          // This header name 'apikey' matches your API spec
+          "apikey": process.env.NEXT_PUBLIC_WHATSAPP_API_KEY || ""
         },
-        body: JSON.stringify({
-          token: token,
-          number: formattedPhoneNumber,
-          message: message,
-        }),
-      })
+        body: JSON.stringify(payload),
+      });
 
-      const data = await response.json()
-      if (data.status === "success") {
-        toast.success("WhatsApp confirmation sent!")
+      const data = await response.json();
+      
+      if (response.ok) {
+        toast.success("WhatsApp confirmation sent!");
+        console.log("WhatsApp API Success:", data);
       } else {
-        console.error("WhatsApp API Error:", data.message)
-        toast.warn(`Failed to send WhatsApp confirmation: ${data.message}`)
+        console.error("WhatsApp API Error:", data.message || data);
+        toast.warn(`Failed to send WhatsApp confirmation: ${data.message || 'Unknown error'}`);
       }
+      // --- [END] Updated API Call ---
+
     } catch (error) {
-      console.error("Error sending WhatsApp message:", error)
-      toast.warn("Could not send WhatsApp confirmation due to a network error.")
+      console.error("Error sending WhatsApp message:", error);
+      toast.warn("Could not send WhatsApp confirmation due to a network error.");
     }
   }
-
   // When submitting, format modalities for service_info as required
   const formatModalitiesForServiceInfo = (modalities: ModalitySelection[]) =>
     modalities.map((m) =>
