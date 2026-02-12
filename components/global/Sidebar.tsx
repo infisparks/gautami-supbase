@@ -3,15 +3,15 @@
 import React, { useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { 
-  Menu, 
-  X, 
-  LayoutDashboard, 
-  Users, 
-  FileText, 
-  Calendar, 
-  Bed, 
-  Skull, 
+import {
+  Menu,
+  X,
+  LayoutDashboard,
+  Users,
+  FileText,
+  Calendar,
+  Bed,
+  Skull,
   LogOut,
   Hospital,
   ChevronDown,
@@ -57,8 +57,8 @@ const Sidebar = () => {
   const toggleSidebar = () => setIsOpen(!isOpen)
 
   const toggleMenu = (menuName: string) => {
-    setExpandedMenus(prev => 
-      prev.includes(menuName) 
+    setExpandedMenus(prev =>
+      prev.includes(menuName)
         ? prev.filter(item => item !== menuName)
         : [...prev, menuName]
     )
@@ -115,6 +115,7 @@ const Sidebar = () => {
           { title: 'IPD Appointment', href: '/ipd/appointment' },
           { title: 'IPD Management', href: '/ipd/management' },
           { title: 'BED Management', href: '/ipd/bed-management' },
+          { title: 'IPD/TPA', href: '/ipd/tpa' },
           { title: 'Add Doctor', href: '/ipd/add-doctor' },
           { title: 'Today  Amount', href: '/amount' },
         ]
@@ -138,6 +139,7 @@ const Sidebar = () => {
           { title: 'IPD Appointment', href: '/ipd/appointment' },
           { title: 'IPD Management', href: '/ipd/management' },
           { title: 'BED Management', href: '/ipd/bed-management' },
+          { title: 'IPD/TPA', href: '/ipd/tpa' },
           { title: 'Add Doctor', href: '/ipd/add-doctor' },
           { title: 'Today  Amount', href: '/amount' },
         ]
@@ -149,7 +151,7 @@ const Sidebar = () => {
     <>
       {/* Mobile overlay */}
       {isOpen && (
-        <div 
+        <div
           className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"
           onClick={toggleSidebar}
         />

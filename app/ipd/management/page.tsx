@@ -33,6 +33,14 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import Layout from "@/components/global/Layout"
 import { supabase } from "@/lib/supabase"
 import { toast } from "sonner"
@@ -124,6 +132,9 @@ export default function IPDManagementPage() {
   const [selectedWard, setSelectedWard] = useState("All")
   const [isLoading, setIsLoading] = useState(true)
   const [isRefreshing, setIsRefreshing] = useState(false)
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
+  const [recordToDelete, setRecordToDelete] = useState<BillingRecord | null>(null)
+  const [deletePassword, setDeletePassword] = useState("")
   const router = useRouter()
   const fetchIPDRecords = useCallback(async () => {
     setIsRefreshing(true)
@@ -176,7 +187,7 @@ export default function IPDManagementPage() {
           const pType = payment.type?.toLowerCase();
           const pPaymentType = payment.paymentType?.toLowerCase();
           const pTransactionType = payment.transactionType?.toLowerCase();
-          
+
           // Only count positive contributions (deposits, advances, settlements)
           if (
             amtType === "advance" || amtType === "deposit" || amtType === "settlement" ||
@@ -188,11 +199,11 @@ export default function IPDManagementPage() {
         },
         0,
       );
-      
+
       const totalRefunds = (record.payment_detail || []).reduce(
         (sum, payment) => {
           const pType = payment.type?.toLowerCase();
-          
+
           // Only count refunds
           if (pType === "refund") {
             return sum + (Number(payment.amount) || 0);
@@ -201,7 +212,7 @@ export default function IPDManagementPage() {
         },
         0,
       );
-      
+
       // Net deposit = deposits - refunds
       const netDeposit = totalDeposits - totalRefunds;
       // Get discharge_type from the joined discharge_summaries.
@@ -210,14 +221,14 @@ export default function IPDManagementPage() {
       const dischargeType = dischargeSummary?.discharge_type || null;
       let status: BillingRecord["status"];
       if (record.discharge_date) {
-          // If discharge_date is set in ipd_registration, it's fully discharged or death
-          status = dischargeType === "Death" ? "Death" : "Discharged";
+        // If discharge_date is set in ipd_registration, it's fully discharged or death
+        status = dischargeType === "Death" ? "Death" : "Discharged";
       } else if (dischargeType === "Discharge Partially") {
-          // If no discharge_date in ipd_registration, but summary says "Discharge Partially"
-          status = "Discharged Partially";
+        // If no discharge_date in ipd_registration, but summary says "Discharge Partially"
+        status = "Discharged Partially";
       } else {
-          // No discharge date and not partially discharged means active
-          status = "Active";
+        // No discharge date and not partially discharged means active
+        status = "Active";
       }
       return {
         ipdId: String(record.ipd_id),
@@ -337,7 +348,7 @@ export default function IPDManagementPage() {
   }, [router])
 
   // Delete handler for IPD records
-  const handleDeleteRecord = useCallback(async (record: BillingRecord) => {
+  const performDeleteRecord = useCallback(async (record: BillingRecord) => {
     try {
       // First, get the bed_id from the IPD record
       const { data: ipdData, error: ipdError } = await supabase
@@ -388,6 +399,25 @@ export default function IPDManagementPage() {
       toast.error("Failed to delete IPD record")
     }
   }, [fetchIPDRecords])
+
+  const handleDeleteClick = useCallback((e: React.MouseEvent, record: BillingRecord) => {
+    e.stopPropagation()
+    setRecordToDelete(record)
+    setDeletePassword("")
+    setIsDeleteDialogOpen(true)
+  }, [])
+
+  const handleConfirmDelete = async () => {
+    if (deletePassword !== "Mudassir") {
+      toast.error("Incorrect Password")
+      return
+    }
+    if (recordToDelete) {
+      await performDeleteRecord(recordToDelete)
+      setIsDeleteDialogOpen(false)
+      setRecordToDelete(null)
+    }
+  }
   if (isLoading) {
     return (
       <Layout>
@@ -405,7 +435,7 @@ export default function IPDManagementPage() {
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
         <div className="container mx-auto px-4 py-8">
           {/* Header */}
-        
+
           {/* Banner Image */}
           <div className="mb-8 flex justify-center">
             <Image
@@ -506,11 +536,10 @@ export default function IPDManagementPage() {
                   <div className="flex flex-wrap gap-2">
                     <Badge
                       variant={selectedWard === "All" ? "default" : "outline"}
-                      className={`cursor-pointer px-3 py-1 text-sm rounded-full transition-colors ${
-                        selectedWard === "All"
+                      className={`cursor-pointer px-3 py-1 text-sm rounded-full transition-colors ${selectedWard === "All"
                           ? "bg-blue-600 text-white hover:bg-blue-700"
                           : "bg-slate-100 text-slate-700 hover:bg-slate-200 border-slate-300"
-                      }`}
+                        }`}
                       onClick={() => setSelectedWard("All")}
                     >
                       All Rooms
@@ -519,11 +548,10 @@ export default function IPDManagementPage() {
                       <Badge
                         key={ward}
                         variant={selectedWard === ward ? "default" : "outline"}
-                        className={`cursor-pointer px-3 py-1 text-sm rounded-full transition-colors ${
-                          selectedWard === ward
+                        className={`cursor-pointer px-3 py-1 text-sm rounded-full transition-colors ${selectedWard === ward
                             ? "bg-blue-600 text-white hover:bg-blue-700"
                             : "bg-slate-100 text-slate-700 hover:bg-slate-200 border-slate-300"
-                        }`}
+                          }`}
                         onClick={() => setSelectedWard(ward)}
                       >
                         {ward}
@@ -539,7 +567,7 @@ export default function IPDManagementPage() {
                     handleManagePatient,
                     handleDrugChart,
                     handleOTForm,
-                    handleDeleteRecord,
+                    handleDeleteClick,
                     isLoading,
                     formatCurrency,
                   )}
@@ -552,7 +580,7 @@ export default function IPDManagementPage() {
                     handleManagePatient,
                     handleDrugChart,
                     handleOTForm,
-                    handleDeleteRecord,
+                    handleDeleteClick,
                     isLoading,
                     formatCurrency,
                   )}
@@ -565,7 +593,7 @@ export default function IPDManagementPage() {
                     handleManagePatient,
                     handleDrugChart,
                     handleOTForm,
-                    handleDeleteRecord,
+                    handleDeleteClick,
                     isLoading,
                     formatCurrency,
                   )}
@@ -574,6 +602,33 @@ export default function IPDManagementPage() {
             </CardContent>
           </Card>
         </div>
+        <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Confirm Deletion</DialogTitle>
+              <DialogDescription>
+                Please enter the password to confirm deletion of this record.
+                This action cannot be undone.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="py-4">
+              <Input
+                type="password"
+                placeholder="Enter Password"
+                value={deletePassword}
+                onChange={(e) => setDeletePassword(e.target.value)}
+              />
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button variant="destructive" onClick={handleConfirmDelete}>
+                Delete
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </Layout>
   )
@@ -585,7 +640,7 @@ function renderPatientsTable(
   handleManagePatient: (e: React.MouseEvent, record: BillingRecord) => void,
   handleDrugChart: (e: React.MouseEvent, record: BillingRecord) => void,
   handleOTForm: (e: React.MouseEvent, record: BillingRecord) => void,
-  handleDeleteRecord: (record: BillingRecord) => void,
+  onDeleteClick: (e: React.MouseEvent, record: BillingRecord) => void,
   isLoading: boolean,
   formatCurrency: (amount: number) => string,
 ) {
@@ -697,37 +752,15 @@ function renderPatientsTable(
                     <Stethoscope className="h-4 w-4 mr-1" />
                     OT
                   </Button>
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={(e) => e.stopPropagation()}
-                        className="text-red-600 hover:bg-red-50 border-red-200 whitespace-nowrap"
-                      >
-                        <Trash2 className="h-4 w-4 mr-1" />
-                        Delete
-                      </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>Delete IPD Record</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          Are you sure you want to delete the IPD record for {record.name} (UHID: {record.uhid})? 
-                          This action will also make the bed available again. This action cannot be undone.
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction
-                          onClick={() => handleDeleteRecord(record)}
-                          className="bg-red-600 hover:bg-red-700"
-                        >
-                          Delete
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={(e) => onDeleteClick(e, record)}
+                    className="text-red-600 hover:bg-red-50 border-red-200 whitespace-nowrap"
+                  >
+                    <Trash2 className="h-4 w-4 mr-1" />
+                    Delete
+                  </Button>
                 </div>
               </td>
             </tr>
