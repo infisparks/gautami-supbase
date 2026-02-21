@@ -51,9 +51,10 @@ export default function PageRenderer({ page, width = 300, className = "", onClic
     // 1. Template Image URL
     const templateParams = useMemo(() => {
         if (!page.templateImageUrl) return null;
+        const baseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://gautamiapi.infiplus.in';
         const url = page.templateImageUrl.startsWith('http')
             ? page.templateImageUrl
-            : `https://apimmedford.infispark.in/${page.templateImageUrl}`;
+            : `${baseUrl}${page.templateImageUrl.startsWith('/') ? '' : '/'}${page.templateImageUrl}`;
         return url;
     }, [page.templateImageUrl]);
 
@@ -81,9 +82,10 @@ export default function PageRenderer({ page, width = 300, className = "", onClic
             >
                 {/* B. User Images */}
                 {page.images && page.images.map((img: any, idx: number) => {
+                    const baseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://gautamiapi.infiplus.in';
                     const imgUrl = img.imageUrl.startsWith('http')
                         ? img.imageUrl
-                        : `https://apimmedford.infispark.in/${img.imageUrl}`;
+                        : `${baseUrl}${img.imageUrl.startsWith('/') ? '' : '/'}${img.imageUrl}`;
 
                     return (
                         <image

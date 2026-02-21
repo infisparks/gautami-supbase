@@ -49,6 +49,7 @@ const GROUP_TO_COLUMN_MAP: Record<string, string> = {
   'OT': 'ot_data',
   'Nursing Notes': 'nursing_notes_data',
   'TPR / Intake / Output': 'tpr_intake_output_data',
+  "TPR / Intake / Output'": 'tpr_intake_output_data',
   'Discharge / Dama': 'discharge_dama_data',
   'Casualty Note': 'casualty_note_data',
   'Indoor Patient File': 'indoor_patient_file_data',
@@ -72,14 +73,35 @@ const IPD_GROUP_ORDER = [
   'Prescription Sheet',
   'Icu chart',
   'TPR / Intake / Output',
+  "TPR / Intake / Output'",
   'Glucose Monitoring Sheet',
   'Investigation Sheet',
   'Consent',
+  'GEN CONSENT',
+  'Consent Form',
+  'TPA Consent Form',
+  'Traveling Consern',
+  'Intravenous Thrombolytic therapy consent',
+  'CONSENT FORM - Transfusin of Blood or Blood Components',
   'OT',
+  'OT Form',
   'Billing Consent',
   'Patient Charges Form',
+  'General word Charges',
+  'Delux Charges',
+  'Suite Room Charges',
+  'Twin Sharing',
+  'Nicu Charges',
+  'Package Form',
+  'FTND Packages',
   'Transfer Summary',
-  'Discharge / Dama'
+  'Discharge / Dama',
+  'Discharge',
+  'Dama',
+  'Newborn foot print record',
+  'BLOOD TRANSFUSION RECORD',
+  'Feedback form',
+  'sheet'
 ];
 
 // --- Type Definitions ---
@@ -503,14 +525,14 @@ export default function IPDManagementPage() {
           const canvasData = row.canvas_data || {};
           allPages.push({
             id: row.id.toString(),
-            templateImageUrl: canvasData.template_image_url || row.template_image_url || "",
+            templateImageUrl: row.template_image_url || canvasData.template_image_url || "",
             pageNumber: row.page_number || 0,
             pageName: row.page_name || "Unnamed Page",
             groupName: row.group_name || "Uncategorized",
-            lines: canvasData.lines || [],
-            texts: canvasData.texts || [],
-            images: canvasData.images || [],
-            locationTag: canvasData.location_tag || row.location_tag || ""
+            lines: Array.isArray(row.canvas_data) ? row.canvas_data : (canvasData.lines || []),
+            texts: row.texts || canvasData.texts || [],
+            images: row.images || canvasData.images || [],
+            locationTag: row.location_tag || canvasData.location_tag || ""
           });
         });
       }
@@ -1131,14 +1153,14 @@ export default function IPDManagementPage() {
           const canvasData = row.canvas_data || {};
           allPages.push({
             id: row.id.toString(),
-            templateImageUrl: canvasData.template_image_url || row.template_image_url || "",
+            templateImageUrl: row.template_image_url || canvasData.template_image_url || "",
             pageNumber: row.page_number || 0,
             pageName: row.page_name || "Unnamed Page",
             groupName: row.group_name || "Uncategorized",
-            lines: canvasData.lines || [],
-            texts: canvasData.texts || [],
-            images: canvasData.images || [],
-            locationTag: canvasData.location_tag || row.location_tag || ""
+            lines: Array.isArray(row.canvas_data) ? row.canvas_data : (canvasData.lines || []),
+            texts: row.texts || canvasData.texts || [],
+            images: row.images || canvasData.images || [],
+            locationTag: row.location_tag || canvasData.location_tag || ""
           });
         });
       }
@@ -1202,9 +1224,10 @@ export default function IPDManagementPage() {
       // A. Template
       if (page.templateImageUrl) {
         try {
+          const baseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://gautamiapi.infiplus.in';
           const imageUrl = page.templateImageUrl.startsWith('http')
             ? page.templateImageUrl
-            : `https://apimmedford.infispark.in/${page.templateImageUrl}`;
+            : `${baseUrl}${page.templateImageUrl.startsWith('/') ? '' : '/'}${page.templateImageUrl}`;
 
           const imgResponse = await fetch(imageUrl);
           const imgBlob = await imgResponse.blob();
@@ -1237,9 +1260,10 @@ export default function IPDManagementPage() {
       if (page.images && Array.isArray(page.images)) {
         for (const img of page.images) {
           try {
+            const baseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://gautamiapi.infiplus.in';
             const imgUrl = img.imageUrl.startsWith('http')
               ? img.imageUrl
-              : `https://apimmedford.infispark.in/${img.imageUrl}`;
+              : `${baseUrl}${img.imageUrl.startsWith('/') ? '' : '/'}${img.imageUrl}`;
 
             const response = await fetch(imgUrl);
             const blob = await response.blob();
