@@ -92,6 +92,7 @@ interface IPDFormInput {
   relativeName: string;
   relativePhone: string | number | null; // Use string | number for form state, convert to number for DB
   relativeAddress: string | null;
+  so_wo_do: string;
   admissionSource: string;
   admissionType: string;
   referralDoctor: string | null;
@@ -149,6 +150,7 @@ interface IPDRegistrationSupabaseFetch {
   ipd_notes: string | null;
   mrd: string | null; // Added new field for MRD
   tpa: boolean | null; // Added new field for TPA
+  so_wo_do: string | null;
 }
 
 // --- End Type Definitions ---
@@ -252,6 +254,7 @@ const IPDAppointmentEditPage = ({ params }: IPDAppointmentEditPageProps) => {
     relativeName: "",
     relativePhone: "",
     relativeAddress: null,
+    so_wo_do: "",
     admissionSource: "",
     admissionType: "",
     referralDoctor: null,
@@ -305,8 +308,8 @@ const IPDAppointmentEditPage = ({ params }: IPDAppointmentEditPageProps) => {
     if (formData.roomType) {
       // Filter available beds for the selected room type. If formData.bed is set and matches, include it too.
       const roomBeds = beds.filter((bed) => {
-          return bed.room_type === formData.roomType &&
-                 (bed.status === "available" || bed.id === formData.bed); // Include current bed even if occupied
+        return bed.room_type === formData.roomType &&
+          (bed.status === "available" || bed.id === formData.bed); // Include current bed even if occupied
       });
       setAvailableBeds(roomBeds);
     } else {
@@ -320,7 +323,7 @@ const IPDAppointmentEditPage = ({ params }: IPDAppointmentEditPageProps) => {
       const { data, error } = await supabase
         .from("ipd_registration")
         .select(
-          `ipd_id,admission_source,admission_type,under_care_of_doctor,payment_detail,bed_id,service_detail,created_at,discharge_date,relative_name,relative_ph_no,relative_address,admission_date,admission_time,uhid,patient_detail(patient_id,name,number,age,gender,address,age_unit,dob),bed_management(id,room_type,bed_number,bed_type,status),discharge_type,ipd_notes,mrd,tpa`
+          `ipd_id,admission_source,admission_type,under_care_of_doctor,payment_detail,bed_id,service_detail,created_at,discharge_date,relative_name,relative_ph_no,relative_address,admission_date,admission_time,uhid,patient_detail(patient_id,name,number,age,gender,address,age_unit,dob),bed_management(id,room_type,bed_number,bed_type,status),discharge_type,ipd_notes,mrd,tpa,so_wo_do`
         )
         .eq("ipd_id", id)
         .single<IPDRegistrationSupabaseFetch>()
@@ -357,6 +360,7 @@ const IPDAppointmentEditPage = ({ params }: IPDAppointmentEditPageProps) => {
           serviceDetails: data.service_detail || [],
           mrd: data.mrd || null, // Set mrd from fetched data
           tpa: data.tpa || false, // Set tpa from fetched data
+          so_wo_do: data.so_wo_do || "", // Set so_wo_do from fetched data
         }));
         setOriginalBedId(data.bed_id); // Store original bed ID for status update logic
       }
@@ -425,6 +429,13 @@ const IPDAppointmentEditPage = ({ params }: IPDAppointmentEditPageProps) => {
     }
   }
 
+  const formatForDB = (val: string | null | undefined) => {
+    if (!val) return null;
+    const trimmed = val.trim();
+    if (trimmed === "") return null;
+    return "    " + trimmed;
+  };
+
   const selectPatient = (patient: PatientDetail) => {
     setFormData((prev: IPDFormInput) => ({
       ...prev,
@@ -474,12 +485,12 @@ const IPDAppointmentEditPage = ({ params }: IPDAppointmentEditPageProps) => {
         const { error: patientUpdateError } = await supabase
           .from("patient_detail")
           .update({
-            name: formData.name,
+            name: formatForDB(formData.name),
             number: formData.phone ? Number(formData.phone) : null,
             age: formData.age ? Number(formData.age) : null,
             age_unit: formData.ageUnit,
             gender: formData.gender,
-            address: formData.address,
+            address: formatForDB(formData.address),
             dob: calculatedDob,
             updated_at: new Date().toISOString(),
           })
@@ -503,7 +514,7 @@ const IPDAppointmentEditPage = ({ params }: IPDAppointmentEditPageProps) => {
         const newDepositEntry: PaymentDetailItem = {
           date: new Date().toISOString(),
           type: "deposit",
-          amountType:"deposit",
+          amountType: "deposit",
           amount: depositAmount,
           createdAt: new Date().toISOString(),
           paymentType: formData.paymentMode,
@@ -554,17 +565,18 @@ const IPDAppointmentEditPage = ({ params }: IPDAppointmentEditPageProps) => {
             uhid: patientUhid,
             admission_source: formData.admissionSource,
             admission_type: formData.admissionType,
-            under_care_of_doctor: formData.underCareOfDoctor,
+            under_care_of_doctor: formatForDB(formData.underCareOfDoctor),
             payment_detail: paymentDetail,
             bed_id: newBedId, // Now correctly a number
             service_detail: serviceDetail,
-            relative_name: formData.relativeName,
+            relative_name: formatForDB(formData.relativeName),
             relative_ph_no: formData.relativePhone ? Number(formData.relativePhone) : null,
-            relative_address: formData.relativeAddress,
+            relative_address: formatForDB(formData.relativeAddress),
             admission_date: formData.date,
             admission_time: formData.time,
-            mrd: formData.mrd || null, // Save mrd
+            mrd: formatForDB(formData.mrd), // Save mrd
             tpa: formData.tpa || false, // Save tpa
+            so_wo_do: formatForDB(formData.so_wo_do),
           })
           .eq("ipd_id", formData.ipd_id);
         if (ipdError) throw ipdError;
@@ -859,6 +871,16 @@ const IPDAppointmentEditPage = ({ params }: IPDAppointmentEditPageProps) => {
                     className="placeholder-gray-400"
                   />
                 </div>
+                <div className="space-y-2">
+                  <Label htmlFor="so_wo_do">S/O, W/O, D/O</Label>
+                  <Input
+                    id="so_wo_do"
+                    placeholder="Enter S/O, W/O, D/O"
+                    value={formData.so_wo_do}
+                    onChange={(e) => setFormData((prev: IPDFormInput) => ({ ...prev, so_wo_do: e.target.value }))}
+                    className="placeholder-gray-400"
+                  />
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -1104,9 +1126,8 @@ const IPDAppointmentEditPage = ({ params }: IPDAppointmentEditPageProps) => {
                           <div className="flex justify-between items-center">
                             <h3 className="text-lg font-semibold capitalize">{roomTypeOption.label}</h3>
                             <span
-                              className={`px-3 py-1 rounded-full text-sm ${
-                                availableBedsCount > 0 ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
-                              }`}
+                              className={`px-3 py-1 rounded-full text-sm ${availableBedsCount > 0 ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
+                                }`}
                             >
                               {availableBedsCount} of {totalBedsCount} available
                             </span>
@@ -1129,11 +1150,10 @@ const IPDAppointmentEditPage = ({ params }: IPDAppointmentEditPageProps) => {
                               return (
                                 <div
                                   key={bed.id}
-                                  className={`flex flex-col items-center justify-center p-3 rounded-lg border-2 cursor-pointer transition-all ${
-                                    isAvailable
-                                      ? "border-green-500 bg-green-50 hover:bg-green-100"
-                                      : "border-gray-300 bg-gray-50 opacity-80"
-                                  }`}
+                                  className={`flex flex-col items-center justify-center p-3 rounded-lg border-2 cursor-pointer transition-all ${isAvailable
+                                    ? "border-green-500 bg-green-50 hover:bg-green-100"
+                                    : "border-gray-300 bg-gray-50 opacity-80"
+                                    }`}
                                   onClick={() => isAvailable && handleBedSelectFromPopup(bed.id)}
                                 >
                                   <Bed size={24} className={isAvailable ? "text-green-600" : "text-gray-500"} />
@@ -1327,18 +1347,18 @@ const IPDAppointmentEditPage = ({ params }: IPDAppointmentEditPageProps) => {
                   time: formData.time,
                   paymentDetails: formData.paymentDetails
                     ? formData.paymentDetails.map(payment => ({
-                        ...payment,
-                        through: payment.through || "cash", // Ensure through always has a value
-                        amountType: (
-                          payment.amountType === "deposit" ||
-                          payment.amountType === "advance" ||
-                          payment.amountType === "settlement" ||
-                          payment.amountType === "refund" ||
-                          payment.amountType === "discount"
-                        )
-                          ? payment.amountType
-                          : undefined
-                      }))
+                      ...payment,
+                      through: payment.through || "cash", // Ensure through always has a value
+                      amountType: (
+                        payment.amountType === "deposit" ||
+                        payment.amountType === "advance" ||
+                        payment.amountType === "settlement" ||
+                        payment.amountType === "refund" ||
+                        payment.amountType === "discount"
+                      )
+                        ? payment.amountType
+                        : undefined
+                    }))
                     : null,
                   serviceDetails: formData.serviceDetails,
                   mrd: formData.mrd || null,

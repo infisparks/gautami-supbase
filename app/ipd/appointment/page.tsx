@@ -90,6 +90,7 @@ interface IPDFormInput {
   relativeName: string;
   relativePhone: string | number | null; // Use string for input, convert to number for DB
   relativeAddress: string | null;
+  so_wo_do: string;
   admissionSource: string;
   admissionType: string;
   referralDoctor: string;
@@ -183,6 +184,7 @@ const IPDAppointmentPage = () => {
     relativeName: "",
     relativePhone: "",
     relativeAddress: null, // Initialize as null to match type
+    so_wo_do: "",
     admissionSource: "ipd", // Default to IPD
     admissionType: "general", // Default to General
     referralDoctor: "",
@@ -443,12 +445,12 @@ const IPDAppointmentPage = () => {
       const { error } = await supabase
         .from("patient_detail")
         .update({
-          name: String(formData.name).trim(),
+          name: formatForDB(formData.name),
           number: phoneNum,
           age: ageNum,
           age_unit: formData.ageUnit,
           gender: formData.gender,
-          address: formData.address,
+          address: formatForDB(formData.address),
         })
         .eq("patient_id", selectedPatient.patient_id)
         .eq("uhid", selectedPatient.uhid)
@@ -530,7 +532,7 @@ const IPDAppointmentPage = () => {
       console.warn("Skipping WhatsApp notification: Phone number is missing or invalid.");
       return;
     }
-   
+
     try {
       // [START] UPDATED WHATSAPP API CALL
       const apiUrl = "https://evo.infispark.in/message/sendText/medzeal";
@@ -564,6 +566,13 @@ const IPDAppointmentPage = () => {
       toast.error(`Error sending WhatsApp message to ${phoneNumber}.`);
       console.error(`Error sending WhatsApp message to ${phoneNumber}:`, error);
     }
+  };
+
+  const formatForDB = (val: string | null | undefined) => {
+    if (!val) return null;
+    const trimmed = val.trim();
+    if (trimmed === "") return null;
+    return "    " + trimmed;
   };
 
 
@@ -634,12 +643,12 @@ const IPDAppointmentPage = () => {
         const { error: patientUpdateError } = await supabase
           .from("patient_detail")
           .update({
-            name: formData.name,
+            name: formatForDB(formData.name),
             number: formData.phone ? Number(formData.phone) : null,
             age: formData.age ? Number(formData.age) : null,
             age_unit: formData.ageUnit,
             gender: formData.gender,
-            address: formData.address,
+            address: formatForDB(formData.address),
             dob: calculatedDob, // Update calculated DOB
             updated_at: new Date().toISOString(),
           })
@@ -658,12 +667,12 @@ const IPDAppointmentPage = () => {
         const { data: newPatientData, error: patientInsertError } = await supabase
           .from("patient_detail")
           .insert({
-            name: formData.name,
+            name: formatForDB(formData.name),
             number: formData.phone ? Number(formData.phone) : null,
             age: formData.age ? Number(formData.age) : null,
             age_unit: formData.ageUnit,
             gender: formData.gender,
-            address: formData.address,
+            address: formatForDB(formData.address),
             uhid: patientUhid,
             dob: calculatedDob,
           })
@@ -708,17 +717,18 @@ const IPDAppointmentPage = () => {
           uhid: patientUhid, // Link using UHID
           admission_source: formData.admissionSource,
           admission_type: formData.admissionType,
-          under_care_of_doctor: doctorNameForDB, // Storing doctor's name
+          under_care_of_doctor: formatForDB(doctorNameForDB), // Storing doctor's name
           payment_detail: paymentDetail, // Now includes 'through' and 'amountType'
           bed_id: selectedBedIdForDb, // This is now correctly a number
           service_detail: serviceDetail, // Empty by default
-          relative_name: formData.relativeName,
+          relative_name: formatForDB(formData.relativeName),
           relative_ph_no: formData.relativePhone ? Number(formData.relativePhone) : null,
-          relative_address: formData.relativeAddress,
+          relative_address: formatForDB(formData.relativeAddress),
           admission_date: formData.date,
           admission_time: formData.time,
-          mrd: formData.mrd || null,
+          mrd: formatForDB(formData.mrd),
           tpa: formData.tpa || false, // Save tpa
+          so_wo_do: formatForDB(formData.so_wo_do),
         })
         .select()
 
@@ -812,6 +822,7 @@ Medford Hospital
       relativeName: "",
       relativePhone: "",
       relativeAddress: null,
+      so_wo_do: "",
       admissionSource: "ipd",
       admissionType: "general",
       referralDoctor: "",
@@ -1113,10 +1124,10 @@ Medford Hospital
                   id="address"
                   placeholder="Enter patient address"
                   value={formData.address || ''} // Handle null for UI
-                    onChange={(e) => setFormData((prev: IPDFormInput) => ({ ...prev, address: e.target.value }))}
-                    autoComplete="off"
-                    className="placeholder-gray-400"
-                    disabled={selectedPatient ? !isEditingPatient : false}
+                  onChange={(e) => setFormData((prev: IPDFormInput) => ({ ...prev, address: e.target.value }))}
+                  autoComplete="off"
+                  className="placeholder-gray-400"
+                  disabled={selectedPatient ? !isEditingPatient : false}
                 />
               </div>
             </CardContent>
@@ -1160,6 +1171,16 @@ Medford Hospital
                     value={formData.relativeAddress || ''} // Handle null for UI
                     onChange={(e) => setFormData((prev: IPDFormInput) => ({ ...prev, relativeAddress: e.target.value }))}
                     autoComplete="off"
+                    className="placeholder-gray-400"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="so_wo_do">S/O, W/O, D/O</Label>
+                  <Input
+                    id="so_wo_do"
+                    placeholder="Enter S/O, W/O, D/O"
+                    value={formData.so_wo_do}
+                    onChange={(e) => setFormData((prev: IPDFormInput) => ({ ...prev, so_wo_do: e.target.value }))}
                     className="placeholder-gray-400"
                   />
                 </div>
@@ -1289,7 +1310,7 @@ Medford Hospital
                     <SearchableSelect
                       options={cashThroughOptions}
                       value={formData.through || 'cash'} // Always show 'cash'
-                      onValueChange={() => {}} // No-op as it's disabled
+                      onValueChange={() => { }} // No-op as it's disabled
                       placeholder="Cash"
                       disabled // Disable the dropdown
                     />
@@ -1418,9 +1439,8 @@ Medford Hospital
                           <div className="flex justify-between items-center">
                             <h3 className="text-lg font-semibold capitalize">{roomTypeOption.label}</h3>
                             <span
-                              className={`px-3 py-1 rounded-full text-sm ${
-                                availableBedsCount > 0 ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
-                              }`}
+                              className={`px-3 py-1 rounded-full text-sm ${availableBedsCount > 0 ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
+                                }`}
                             >
                               {availableBedsCount} of {totalBedsCount} available
                             </span>
@@ -1443,11 +1463,10 @@ Medford Hospital
                               return (
                                 <div
                                   key={bed.id}
-                                  className={`flex flex-col items-center justify-center p-3 rounded-lg border-2 cursor-pointer transition-all ${
-                                    isAvailable
-                                      ? "border-green-500 bg-green-50 hover:bg-green-100"
-                                      : "border-gray-300 bg-gray-50 opacity-80"
-                                  }`}
+                                  className={`flex flex-col items-center justify-center p-3 rounded-lg border-2 cursor-pointer transition-all ${isAvailable
+                                    ? "border-green-500 bg-green-50 hover:bg-green-100"
+                                    : "border-gray-300 bg-gray-50 opacity-80"
+                                    }`}
                                   onClick={() => isAvailable && handleBedSelectFromPopup(bed.id)}
                                 >
                                   <Bed size={24} className={isAvailable ? "text-green-600" : "text-gray-500"} />
@@ -1571,8 +1590,8 @@ Medford Hospital
                       </p>
                     </div>
                   )}
-                   {/* Display 'Through' only if a method is selected */}
-                   {formData.through && (
+                  {/* Display 'Through' only if a method is selected */}
+                  {formData.through && (
                     <div className="bg-white p-3 rounded-md shadow-sm">
                       <span className="font-medium text-gray-500">Through:</span>
                       <p className="font-semibold mt-1">
