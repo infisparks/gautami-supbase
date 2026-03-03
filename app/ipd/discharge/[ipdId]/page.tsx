@@ -381,10 +381,10 @@ export default function DischargeSummaryPage() {
     const { data: counterData, error: counterError } = await supabase.rpc('increment_bill_counter', { month_year_param: monthYear });
 
     if (counterError) {
-        console.error("Supabase RPC error:", counterError);
-        throw new Error("Failed to get or increment bill counter.");
+      console.error("Supabase RPC error:", counterError);
+      throw new Error("Failed to get or increment bill counter.");
     }
-    
+
     if (!counterData) {
       throw new Error("No counter data returned from RPC.");
     }
@@ -585,6 +585,64 @@ export default function DischargeSummaryPage() {
     }
   };
 
+  /* ─── Re-activate Patient Function ────────────────────────── */
+  const handleReactivatePatient = async () => {
+    if (!patientRecord) return;
+
+    const confirmReactivate = window.confirm(
+      "Are you sure you want to re-activate this patient? This will clear the discharge date, bill number, and mark the bed as occupied."
+    );
+    if (!confirmReactivate) return;
+
+    setSaving(true);
+    try {
+      // 1. Update ipd_registration: clear discharge_date and billno
+      const { error: ipdError } = await supabase
+        .from("ipd_registration")
+        .update({
+          discharge_date: null,
+          billno: null
+        })
+        .eq("ipd_id", parseInt(patientRecord.ipdId));
+
+      if (ipdError) throw ipdError;
+
+      // 2. Update discharge_summaries: clear discharge_type
+      const { error: summaryError } = await supabase
+        .from("discharge_summaries")
+        .update({ discharge_type: null })
+        .eq("ipd_id", parseInt(patientRecord.ipdId));
+
+      if (summaryError && summaryError.code !== 'PGRST116') {
+        console.warn("Summary update error:", summaryError);
+      }
+
+      // 3. Update bed_management: set status to 'occupied'
+      if (patientRecord.bedId) {
+        const { error: bedError } = await supabase
+          .from("bed_management")
+          .update({ status: "occupied" })
+          .eq("id", patientRecord.bedId);
+        if (bedError) throw bedError;
+      }
+
+      // 4. Update local state
+      setPatientRecord(prev => prev ? {
+        ...prev,
+        dischargeDate: null,
+        currentDischargeType: null,
+        billno: null
+      } : null);
+
+      toast.success("Patient reactivated and bed marked as occupied!");
+    } catch (err: any) {
+      console.error("Reactivation failed:", err);
+      toast.error("Reactivation failed: " + (err.message || "Unknown error"));
+    } finally {
+      setSaving(false);
+    }
+  };
+
   /* ─── Helper to render a single field with (Ctrl+B) hint ───────────────────── */
   const Field = (
     key: keyof DischargeDataForm,
@@ -668,20 +726,31 @@ export default function DischargeSummaryPage() {
               </div>
             )}
 
-            {patientRecord.dischargeDate && patientRecord.currentDischargeType && (
-              <button
-                onClick={() => {
-                  setShowEditDischargeDateModal(true);
-                  if (patientRecord.dischargeDate) {
-                    setEditedDischargeDate(format(parseISO(patientRecord.dischargeDate), "yyyy-MM-dd'T'HH:mm"));
-                  }
-                }}
-                className="flex items-center px-4 py-2 bg-gray-200 text-gray-700 rounded-lg shadow-sm hover:bg-gray-300 transition-colors"
-                disabled={Boolean(loading || saving)}
-              >
-                <Edit size={16} className="mr-2" />
-                Edit Discharge Date
-              </button>
+            {patientRecord.dischargeDate && (
+              <>
+                <button
+                  onClick={handleReactivatePatient}
+                  className="flex items-center px-4 py-2 bg-amber-100 text-amber-700 border border-amber-200 rounded-lg shadow-sm hover:bg-amber-200 transition-colors"
+                  disabled={Boolean(loading || saving)}
+                >
+                  <RefreshCw size={16} className={`mr-2 ${saving ? 'animate-spin' : ''}`} />
+                  Re-activate Patient
+                </button>
+
+                <button
+                  onClick={() => {
+                    setShowEditDischargeDateModal(true);
+                    if (patientRecord.dischargeDate) {
+                      setEditedDischargeDate(format(parseISO(patientRecord.dischargeDate), "yyyy-MM-dd'T'HH:mm"));
+                    }
+                  }}
+                  className="flex items-center px-4 py-2 bg-gray-200 text-gray-700 rounded-lg shadow-sm hover:bg-gray-300 transition-colors"
+                  disabled={Boolean(loading || saving)}
+                >
+                  <Edit size={16} className="mr-2" />
+                  Edit Discharge Date
+                </button>
+              </>
             )}
 
             <button
@@ -777,9 +846,9 @@ export default function DischargeSummaryPage() {
                         <Calendar size={14} className="mr-1" /> Admitted:{" "}
                         {patientRecord.admitDate
                           ? format(
-                              parseISO(patientRecord.admitDate),
-                              "dd MMM,yyyy"
-                            )
+                            parseISO(patientRecord.admitDate),
+                            "dd MMM,yyyy"
+                          )
                           : "Unknown"}
                       </span>
                     )}
@@ -883,11 +952,11 @@ export default function DischargeSummaryPage() {
                           <p className="text-sm text-orange-600">
                             Billing pending or incomplete discharge.
                           </p>
-                           {patientRecord.dischargeDate && (
-                             <p className="text-xs text-orange-500 mt-1">
-                               Discharge initiated on: {format(parseISO(patientRecord.dischargeDate), "dd MMM,yyyy 'at' HH:mm")}
-                             </p>
-                           )}
+                          {patientRecord.dischargeDate && (
+                            <p className="text-xs text-orange-500 mt-1">
+                              Discharge initiated on: {format(parseISO(patientRecord.dischargeDate), "dd MMM,yyyy 'at' HH:mm")}
+                            </p>
+                          )}
                         </div>
                       </div>
                     ) : patientRecord.dischargeDate ? (
