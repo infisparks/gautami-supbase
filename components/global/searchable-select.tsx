@@ -39,16 +39,9 @@ export function SearchableSelect({
     setSearchValue(selectedOption ? selectedOption.label : "")
   }, [value, options])
 
-  const handleSelect = (currentValue: string) => {
-    const selectedOption = options.find((option) => option.label.toLowerCase() === currentValue.toLowerCase())
-    if (selectedOption) {
-      onValueChange(selectedOption.value)
-      setSearchValue(selectedOption.label)
-    } else {
-      // If no match, clear the value or handle as needed
-      onValueChange("")
-      setSearchValue(currentValue) // Keep what user typed if no match
-    }
+  const handleSelect = (option: Option) => {
+    onValueChange(option.value)
+    setSearchValue(option.label)
     setOpen(false)
   }
 
@@ -88,7 +81,7 @@ export function SearchableSelect({
                 <CommandItem
                   key={option.value}
                   value={option.label} // Use label for search matching
-                  onSelect={handleSelect}
+                  onSelect={() => handleSelect(option)}
                 >
                   {option.label}
                   <Check className={cn("ml-auto h-4 w-4", value === option.value ? "opacity-100" : "opacity-0")} />

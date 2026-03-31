@@ -194,8 +194,8 @@ const IPDAppointmentPage = () => {
     through: "cash", // New: Default 'through' to 'cash'
     roomType: "",
     bed: null, // Initialize as null to match type
-    date: new Date().toISOString().split("T")[0],
-    time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false }), // Default to current time (24-hour)
+    date: new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()),
+    time: new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date()), // Default to current IST time (24-hour)
     mrd: null,
     tpa: false, // Initialize tpa to false
   })
@@ -338,6 +338,9 @@ const IPDAppointmentPage = () => {
     }))
     setSelectedPatient(p)
     setIsEditingPatient(false)
+    setSearchedPatientResults(null)
+    setSearchUhIdInput("")
+    setSearchPhoneInput("")
   }, [])
 
   // Reset selection and form for new patient entry
@@ -599,7 +602,8 @@ const IPDAppointmentPage = () => {
 
       // Calculate DOB based on age and ageUnit
       if (formData.age && formData.ageUnit) {
-        const today = new Date();
+        const now = new Date();
+        const today = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
         let dobDate = new Date(today);
 
         const ageNum = Number(formData.age);
@@ -832,8 +836,8 @@ Medford Hospital
       through: "cash", // Reset 'through' to cash default
       roomType: "",
       bed: null,
-      date: new Date().toISOString().split("T")[0],
-      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false }), // Reset to current time
+      date: new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()),
+      time: new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date()), // Reset to current IST time
       tpa: false, // Reset tpa to false
     })
   }
@@ -987,10 +991,13 @@ Medford Hospital
               <div className="space-y-2">
                 <Label>Select Patient from Results</Label>
                 <SearchableSelect
-                  options={searchedPatientResults.map((p) => ({ value: p.uhid, label: `${p.name} (${p.uhid}) – ${p.number ?? ''}` }))}
+                  options={searchedPatientResults.map((p) => ({
+                    value: String(p.patient_id),
+                    label: `${p.name} (${p.uhid || "No UHID"}) – ${p.number ?? ""}`
+                  }))}
                   value={""}
                   onValueChange={(v) => {
-                    const sel = searchedPatientResults.find((p) => p.uhid === v)
+                    const sel = searchedPatientResults.find((p) => String(p.patient_id) === v)
                     if (sel) {
                       fillFormWithPatientData(sel)
                       toast.success(`Selected: ${sel.name}`)
