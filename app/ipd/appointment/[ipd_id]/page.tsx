@@ -215,8 +215,6 @@ const IPDAppointmentEditPage = ({ params }: IPDAppointmentEditPageProps) => {
   const [isLoading, setIsLoading] = useState(true)
   const [showPreview, setShowPreview] = useState(false)
   const [showAvailability, setShowAvailability] = useState(false)
-  const [patientSuggestions, setPatientSuggestions] = useState<PatientDetail[]>([])
-  const [showSuggestions, setShowSuggestions] = useState(false)
   const [originalBedId, setOriginalBedId] = useState<number | null>(null);
   const router = useRouter();
 
@@ -416,20 +414,6 @@ const IPDAppointmentEditPage = ({ params }: IPDAppointmentEditPageProps) => {
 
   const handlePatientNameChange = (value: string) => {
     setFormData((prev: IPDFormInput) => ({ ...prev, name: value }));
-
-    if (value.length > 0) {
-      const suggestions = patients
-        .filter((patient) => 
-          patient.name.toLowerCase().includes(value.toLowerCase()) && 
-          patient.uhid !== formData.uhid
-        )
-        .slice(0, 5)
-      setPatientSuggestions(suggestions)
-      setShowSuggestions(suggestions.length > 0)
-    } else {
-      setPatientSuggestions([]);
-      setShowSuggestions(false)
-    }
   }
 
   const formatForDB = (val: string | null | undefined) => {
@@ -439,19 +423,7 @@ const IPDAppointmentEditPage = ({ params }: IPDAppointmentEditPageProps) => {
     return trimmed;
   };
 
-  const selectPatient = (patient: PatientDetail) => {
-    setFormData((prev: IPDFormInput) => ({
-      ...prev,
-      uhid: patient.uhid,
-      name: (patient.name || "").trim(),
-      phone: patient.number,
-      age: patient.age,
-      ageUnit: patient.age_unit || "years",
-      gender: patient.gender || "other", // Provide a default non-null string
-      address: (patient.address || "").trim(),
-    }))
-    setShowSuggestions(false)
-  }
+
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -735,38 +707,10 @@ const IPDAppointmentEditPage = ({ params }: IPDAppointmentEditPageProps) => {
                     placeholder="Enter patient name"
                     value={formData.name}
                     onChange={(e) => handlePatientNameChange(e.target.value)}
-                    onFocus={() => {
-                      if (formData.name.length > 0) {
-                        setPatientSuggestions(
-                          patients
-                            .filter((patient) => 
-                              patient.name.toLowerCase().includes(formData.name.toLowerCase()) && 
-                              patient.uhid !== formData.uhid
-                            )
-                            .slice(0, 5)
-                        );
-                        setShowSuggestions(true);
-                      }
-                    }}
-                    onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
                     required
                     autoComplete="off"
                     className="placeholder-gray-400"
                   />
-                  {showSuggestions && (
-                    <div className="absolute z-10 w-full bg-white border border-gray-200 rounded-md shadow-lg max-h-40 overflow-y-auto">
-                      {patientSuggestions.map((patient) => (
-                        <div
-                          key={patient.uhid}
-                          className="p-2 hover:bg-gray-100 cursor-pointer"
-                          onMouseDown={() => selectPatient(patient)}
-                        >
-                          <div className="font-medium">{patient.name}</div>
-                          <div className="text-sm text-gray-600">{patient.number} - {patient.uhid}</div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="phone">Phone Number</Label>
