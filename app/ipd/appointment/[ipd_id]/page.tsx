@@ -336,12 +336,12 @@ const IPDAppointmentEditPage = ({ params }: IPDAppointmentEditPageProps) => {
           ...prev,
           ipd_id: data.ipd_id,
           uhid: data.uhid,
-          name: data.patient_detail?.name || "",
+          name: (data.patient_detail?.name || "").trim(),
           phone: data.patient_detail?.number || "", // Now correctly `number | null`
           age: data.patient_detail?.age || "", // Now correctly `number | null`
           ageUnit: data.patient_detail?.age_unit || "years",
           gender: data.patient_detail?.gender || "other", // Provide a default non-null string
-          address: data.patient_detail?.address || null, // Can be null
+          address: (data.patient_detail?.address || "").trim() || null, // Can be null
           relativeName: data.relative_name || "",
           relativePhone: data.relative_ph_no || "", // Now correctly `number | null`
           relativeAddress: data.relative_address || null,
@@ -436,19 +436,19 @@ const IPDAppointmentEditPage = ({ params }: IPDAppointmentEditPageProps) => {
     if (!val) return null;
     const trimmed = val.trim();
     if (trimmed === "") return null;
-    return "    " + trimmed;
+    return trimmed;
   };
 
   const selectPatient = (patient: PatientDetail) => {
     setFormData((prev: IPDFormInput) => ({
       ...prev,
       uhid: patient.uhid,
-      name: patient.name,
+      name: (patient.name || "").trim(),
       phone: patient.number,
       age: patient.age,
       ageUnit: patient.age_unit || "years",
       gender: patient.gender || "other", // Provide a default non-null string
-      address: patient.address,
+      address: (patient.address || "").trim(),
     }))
     setShowSuggestions(false)
   }

@@ -290,12 +290,12 @@ const IPDAppointmentPage = () => {
       if (data) {
         setFormData((prev: IPDFormInput) => ({
           ...prev,
-          name: data.name || "",
+          name: (data.name || "").trim(),
           phone: data.number || "",
           age: data.age || "",
           ageUnit: data.age_unit || "years",
           gender: data.gender || null,
-          address: data.address || null,
+          address: (data.address || "").trim() || null,
         }));
         toast.success(`Patient details loaded for UHID: ${uhid}`);
       } else {
@@ -329,12 +329,12 @@ const IPDAppointmentPage = () => {
     setFormData((prev) => ({
       ...prev,
       uhid: p.uhid || "",
-      name: p.name || "",
+      name: (p.name || "").trim(),
       phone: p.number ?? "",
       age: p.age ?? "",
       ageUnit: p.age_unit || "years",
       gender: p.gender,
-      address: p.address,
+      address: (p.address || "").trim(),
     }))
     setSelectedPatient(p)
     setIsEditingPatient(false)
@@ -575,7 +575,7 @@ const IPDAppointmentPage = () => {
     if (!val) return null;
     const trimmed = val.trim();
     if (trimmed === "") return null;
-    return "    " + trimmed;
+    return trimmed;
   };
 
 
