@@ -419,7 +419,10 @@ const IPDAppointmentEditPage = ({ params }: IPDAppointmentEditPageProps) => {
 
     if (value.length > 0) {
       const suggestions = patients
-        .filter((patient) => patient.name.toLowerCase().includes(value.toLowerCase()))
+        .filter((patient) => 
+          patient.name.toLowerCase().includes(value.toLowerCase()) && 
+          patient.uhid !== formData.uhid
+        )
         .slice(0, 5)
       setPatientSuggestions(suggestions)
       setShowSuggestions(suggestions.length > 0)
@@ -736,7 +739,10 @@ const IPDAppointmentEditPage = ({ params }: IPDAppointmentEditPageProps) => {
                       if (formData.name.length > 0) {
                         setPatientSuggestions(
                           patients
-                            .filter((patient) => patient.name.toLowerCase().includes(formData.name.toLowerCase()))
+                            .filter((patient) => 
+                              patient.name.toLowerCase().includes(formData.name.toLowerCase()) && 
+                              patient.uhid !== formData.uhid
+                            )
                             .slice(0, 5)
                         );
                         setShowSuggestions(true);

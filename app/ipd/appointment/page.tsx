@@ -523,8 +523,8 @@ const IPDAppointmentPage = () => {
   }
 
   const handlePatientNameChange = (value: string) => {
-    // Keep simple behavior: update name and clear UHID if the user edits name (new patient case)
-    setFormData((prev: IPDFormInput) => ({ ...prev, name: value, uhid: "" }));
+    // Keep UHID if it's already there (so we update instead of creating a new user)
+    setFormData((prev: IPDFormInput) => ({ ...prev, name: value }));
   }
 
   // Removed selectPatient() as name-based suggestions UI is removed
